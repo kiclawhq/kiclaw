@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/dark.png">
     <source media="(prefers-color-scheme: light)" srcset="assets/light.png">
-    <img src="assets/light.png" alt="KiClaw logo" width="180">
+    <img src="assets/light.png" alt="KiClaw logo" width="150" height="130">
   </picture>
 </p>
 
@@ -10,7 +10,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/dark-name.png">
     <source media="(prefers-color-scheme: light)" srcset="assets/light-name.png">
-    <img src="assets/light-name.png" alt="KiClaw" width="240">
+    <img src="assets/light-name.png" alt="KiClaw" width="140" height="50">
   </picture>
 </p>
 
