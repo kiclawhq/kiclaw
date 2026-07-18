@@ -1,0 +1,23 @@
+name: KiClaw project review
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv run --locked --extra dev pytest -q
+      - name: Review KiCad project
+        run: uv run --locked kiclaw review . --output kiclaw-review.json
+      - name: Upload KiClaw report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiclaw-review
+          path: kiclaw-review.json

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiclaw"
+version = "0.1.0"
+description = "An honest, file-first MCP server for KiCad"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "KiClaw contributors" }]
+# Keep the MCP SDK on the proven 1.27 line. MCP 1.28.1 can stall during import
+# on the macOS KiCad host this project supports.
+dependencies = [
+    "mcp==1.27.2",
+    "httpx>=0.27.1,<0.28",
+    "pydantic>=2.11,<2.12",
+    "pydantic-settings>=2.5.2,<2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+ipc = ["kicad-python>=0.7"]
+
+[project.scripts]
+kiclaw = "kiclaw.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

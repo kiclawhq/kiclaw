@@ -1,0 +1,4 @@
+interface:
+  display_name: "KiClaw Engineering Loop"
+  short_description: "Guarded KiCad inspect-edit-verify workflow"
+  default_prompt: "Use $kiclaw-agent to inspect, modify, validate, and review this KiCad project with KiClaw evidence."
