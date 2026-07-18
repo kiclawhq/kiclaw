@@ -2,13 +2,22 @@
     <img src="kimon.png" alt="KiClaw logo" width="150" height="150">
 </p>
 
-<p align="center">
+<p align="center" style="display: flex; justify-content: center; align-items: center; gap: 5px; height: 50px; margin: 0;">
+  <!-- Logo Icon -->
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/light.png">
+    <img src="assets/light.png" alt="KiClaw Logo" width="40" height="36" style="display: inline-block; vertical-align: middle;">
+  </picture>
+  <!-- Logo Name -->
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/dark-name.png">
     <source media="(prefers-color-scheme: light)" srcset="assets/light-name.png">
-    <img src="assets/light-name.png" alt="KiClaw" width="140" height="50">
+    <img src="assets/light-name.png" alt="KiClaw Name" width="140" height="50" style="display: inline-block; vertical-align: middle;">
   </picture>
 </p>
+
+
 
 <hr>
 
