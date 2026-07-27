@@ -20,7 +20,29 @@ from .analysis import (
 )
 from .core import (add_component, add_custom_component, add_track, add_wire, backend_session_info, board_summary, capability_report, compatibility_report, datasheet_evidence, ipc_board_status, ipc_move_footprint, ipc_session_info, move_footprint, pcb_backend_policy, project_info, review_board, review_project, run_analysis, run_check, run_dfm, run_emc, run_export, run_si, run_spice, run_thermal, schematic_roundtrip_check, schematic_summary, spice_capability,
                    snapshot_create, snapshot_list, snapshot_restore)
-from .edit_ext import add_net_label, add_via, delete_footprint, move_component, place_power_symbol, rotate_footprint, set_component_value, set_footprint_property
+from .edit_ext import (
+    add_net_label,
+    add_via,
+    create_zone,
+    delete_component,
+    delete_footprint,
+    delete_track,
+    delete_via,
+    delete_wire,
+    dry_run_edit,
+    fill_zones,
+    generate_assembly_notes,
+    lock_footprint,
+    move_component,
+    place_footprint,
+    place_power_symbol,
+    rotate_component,
+    rotate_footprint,
+    set_component_value,
+    set_footprint_property,
+    unlock_footprint,
+    validate_design_rules,
+)
 from .inspect_ext import (
     check_connectivity,
     find_objects,
@@ -36,12 +58,27 @@ from .inspect_ext import (
     list_components,
     list_project_files,
 )
+from .libraries import (
+    create_project_library,
+    get_footprint_info,
+    get_symbol_info,
+    import_footprint_to_project,
+    import_symbol_to_project,
+    list_footprint_libraries,
+    list_project_libraries,
+    list_symbol_libraries,
+    search_footprints,
+    search_symbols,
+)
 from .live import (
     get_canvas_state,
     get_selection,
     get_view_state,
     highlight_component,
     highlight_net,
+    ipc_add_track,
+    ipc_place_footprint,
+    ipc_save_board,
     launch_kicad,
     live_status,
     render_board,
@@ -50,6 +87,13 @@ from .live import (
     zoom_to_object,
 )
 from .manufacturing import create_release_package, export_bom, export_netlist, export_pdf_schematic, export_pos
+from .project_session import (
+    close_project,
+    create_new_project,
+    get_active_project,
+    open_project_session,
+    save_project,
+)
 
 logger = logging.getLogger("kiclaw")
 
@@ -583,34 +627,197 @@ def suggest_next_actions_tool(project: str | None = None) -> dict[str, Any]:
     return suggest_next_actions(project)
 
 
+# --- Full-surface expansion: project, library, remaining edits, live extras ---
+
+@mcp.tool(name="create_new_project")
+def create_new_project_tool(directory: str, name: str, template: str | None = None) -> dict[str, Any]:
+    return create_new_project(directory, name, template)
+
+
+@mcp.tool(name="open_project_session")
+def open_project_session_tool(path: str) -> dict[str, Any]:
+    return open_project_session(path)
+
+
+@mcp.tool(name="close_project")
+def close_project_tool() -> dict[str, Any]:
+    return close_project()
+
+
+@mcp.tool(name="save_project")
+def save_project_tool(path: str | None = None, backend: str = "auto") -> dict[str, Any]:
+    return save_project(path, backend)
+
+
+@mcp.tool(name="get_active_project")
+def get_active_project_tool() -> dict[str, Any]:
+    return get_active_project()
+
+
+@mcp.tool(name="search_symbols")
+def search_symbols_tool(query: str, limit: int = 50) -> dict[str, Any]:
+    return search_symbols(query, limit)
+
+
+@mcp.tool(name="search_footprints")
+def search_footprints_tool(query: str, limit: int = 50) -> dict[str, Any]:
+    return search_footprints(query, limit)
+
+
+@mcp.tool(name="get_symbol_info")
+def get_symbol_info_tool(lib_id: str) -> dict[str, Any]:
+    return get_symbol_info(lib_id)
+
+
+@mcp.tool(name="get_footprint_info")
+def get_footprint_info_tool(fp_id: str) -> dict[str, Any]:
+    return get_footprint_info(fp_id)
+
+
+@mcp.tool(name="list_project_libraries")
+def list_project_libraries_tool(project: str) -> dict[str, Any]:
+    return list_project_libraries(project)
+
+
+@mcp.tool(name="list_symbol_libraries")
+def list_symbol_libraries_tool() -> dict[str, Any]:
+    return list_symbol_libraries()
+
+
+@mcp.tool(name="list_footprint_libraries")
+def list_footprint_libraries_tool() -> dict[str, Any]:
+    return list_footprint_libraries()
+
+
+@mcp.tool(name="create_project_library")
+def create_project_library_tool(project: str, nickname: str, kind: str = "symbol") -> dict[str, Any]:
+    return create_project_library(project, nickname, kind)
+
+
+@mcp.tool(name="import_symbol_to_project")
+def import_symbol_to_project_tool(project: str, lib_id: str, nickname: str | None = None) -> dict[str, Any]:
+    return import_symbol_to_project(project, lib_id, nickname)
+
+
+@mcp.tool(name="import_footprint_to_project")
+def import_footprint_to_project_tool(project: str, fp_id: str, nickname: str | None = None) -> dict[str, Any]:
+    return import_footprint_to_project(project, fp_id, nickname)
+
+
+@mcp.tool(name="delete_track")
+def delete_track_tool(board: str, start_x: float, start_y: float, end_x: float, end_y: float, tolerance: float = 0.01, expected_sha256: str | None = None) -> dict[str, Any]:
+    return delete_track(board, start_x, start_y, end_x, end_y, tolerance, expected_sha256)
+
+
+@mcp.tool(name="delete_via")
+def delete_via_tool(board: str, x: float, y: float, tolerance: float = 0.05, expected_sha256: str | None = None) -> dict[str, Any]:
+    return delete_via(board, x, y, tolerance, expected_sha256)
+
+
+@mcp.tool(name="place_footprint")
+def place_footprint_tool(board: str, source_reference: str, new_reference: str, x: float, y: float, rotation: float = 0.0, value: str | None = None, expected_sha256: str | None = None) -> dict[str, Any]:
+    return place_footprint(board, source_reference, new_reference, x, y, rotation, value, expected_sha256)
+
+
+@mcp.tool(name="create_zone")
+def create_zone_tool(board: str, net_name: str, points: list[list[float]], layer: str = "F.Cu", expected_sha256: str | None = None) -> dict[str, Any]:
+    return create_zone(board, net_name, points, layer, expected_sha256)
+
+
+@mcp.tool(name="fill_zones")
+def fill_zones_tool(board: str) -> dict[str, Any]:
+    return fill_zones(board)
+
+
+@mcp.tool(name="lock_footprint")
+def lock_footprint_tool(board: str, reference: str, expected_sha256: str | None = None) -> dict[str, Any]:
+    return lock_footprint(board, reference, True, expected_sha256)
+
+
+@mcp.tool(name="unlock_footprint")
+def unlock_footprint_tool(board: str, reference: str, expected_sha256: str | None = None) -> dict[str, Any]:
+    return unlock_footprint(board, reference, expected_sha256)
+
+
+@mcp.tool(name="delete_component")
+def delete_component_tool(schematic: str, reference: str, expected_sha256: str | None = None) -> dict[str, Any]:
+    return delete_component(schematic, reference, expected_sha256)
+
+
+@mcp.tool(name="delete_wire")
+def delete_wire_tool(schematic: str, start_x: float, start_y: float, end_x: float, end_y: float, tolerance: float = 0.01, expected_sha256: str | None = None) -> dict[str, Any]:
+    return delete_wire(schematic, start_x, start_y, end_x, end_y, tolerance, expected_sha256)
+
+
+@mcp.tool(name="rotate_component")
+def rotate_component_tool(schematic: str, reference: str, rotation: float, expected_sha256: str | None = None) -> dict[str, Any]:
+    return rotate_component(schematic, reference, rotation, expected_sha256)
+
+
+@mcp.tool(name="dry_run_edit")
+def dry_run_edit_tool(operation: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    return dry_run_edit(operation, **(arguments or {}))
+
+
+@mcp.tool(name="generate_assembly_notes")
+def generate_assembly_notes_tool(project: str) -> dict[str, Any]:
+    return generate_assembly_notes(project)
+
+
+@mcp.tool(name="validate_design_rules")
+def validate_design_rules_tool(board: str) -> dict[str, Any]:
+    return validate_design_rules(board)
+
+
+@mcp.tool(name="ipc_save_board")
+def ipc_save_board_tool() -> dict[str, Any]:
+    return ipc_save_board()
+
+
+@mcp.tool(name="ipc_place_footprint")
+def ipc_place_footprint_tool(board: str, reference: str, x: float, y: float, rotation: float = 0.0) -> dict[str, Any]:
+    return ipc_place_footprint(board, reference, x, y, rotation)
+
+
+@mcp.tool(name="ipc_add_track")
+def ipc_add_track_tool(board: str, net_name: str, start_x: float, start_y: float, end_x: float, end_y: float, width: float = 0.25) -> dict[str, Any]:
+    return ipc_add_track(board, net_name, start_x, start_y, end_x, end_y, width)
+
+
 _TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "inspect": (
-        "capability_report", "compatibility_report", "open_project", "project_info", "list_project_files",
-        "get_project_structure", "datasheet_evidence", "get_board_status", "pcb_statistics", "list_footprints",
-        "list_nets", "list_components", "get_component_details", "get_footprint_details", "get_net_details",
-        "get_layer_stack", "get_design_rules", "find_objects", "schematic_summary", "schematic_roundtrip_check",
-        "get_transaction_history",
+        "capability_report", "compatibility_report", "open_project", "open_project_session", "project_info",
+        "get_active_project", "list_project_files", "get_project_structure", "datasheet_evidence", "get_board_status",
+        "pcb_statistics", "list_footprints", "list_nets", "list_components", "get_component_details",
+        "get_footprint_details", "get_net_details", "get_layer_stack", "get_design_rules", "find_objects",
+        "schematic_summary", "schematic_roundtrip_check", "get_transaction_history", "search_symbols",
+        "search_footprints", "get_symbol_info", "get_footprint_info", "list_project_libraries",
+        "list_symbol_libraries", "list_footprint_libraries",
     ),
     "verify": (
-        "run_drc", "run_erc", "get_drc_errors", "get_erc_errors", "check_connectivity", "run_dfm", "run_emc",
-        "run_si", "run_thermal", "run_analysis", "analyze_power_tree", "analyze_decoupling", "audit_protection",
-        "analyze_subcircuits", "analyze_buses", "analyze_passive_networks", "review_board", "review_project",
-        "verify_last_action", "spice_capability", "run_spice",
+        "run_drc", "run_erc", "get_drc_errors", "get_erc_errors", "check_connectivity", "validate_design_rules",
+        "run_dfm", "run_emc", "run_si", "run_thermal", "run_analysis", "analyze_power_tree", "analyze_decoupling",
+        "audit_protection", "analyze_subcircuits", "analyze_buses", "analyze_passive_networks", "review_board",
+        "review_project", "verify_last_action", "spice_capability", "run_spice",
     ),
     "export": (
         "export_gerbers", "export_drill", "export_svg", "export_ipc2581", "export_bom", "export_pos",
         "export_cpl", "export_netlist", "export_pdf_schematic", "create_release_package", "render_board",
+        "generate_assembly_notes",
     ),
-    "snapshot": ("snapshot_create", "snapshot_list", "snapshot_restore", "backend_session_info"),
+    "snapshot": ("snapshot_create", "snapshot_list", "snapshot_restore", "backend_session_info", "dry_run_edit"),
     "edit": (
-        "add_track", "add_via", "move_footprint", "rotate_footprint", "delete_footprint", "set_footprint_property",
-        "add_wire", "add_component", "add_custom_component", "add_net_label", "move_component", "set_component_value",
-        "place_power_symbol",
+        "add_track", "add_via", "delete_track", "delete_via", "move_footprint", "rotate_footprint",
+        "delete_footprint", "place_footprint", "set_footprint_property", "create_zone", "fill_zones",
+        "lock_footprint", "unlock_footprint", "add_wire", "delete_wire", "add_component", "add_custom_component",
+        "delete_component", "add_net_label", "move_component", "rotate_component", "set_component_value",
+        "place_power_symbol", "import_symbol_to_project", "import_footprint_to_project", "create_project_library",
+        "create_new_project", "save_project", "close_project",
     ),
     "ipc": (
-        "ipc_session_info", "ipc_board_status", "ipc_move_footprint", "pcb_backend_policy", "launch_kicad",
-        "live_status", "get_selection", "get_view_state", "get_canvas_state", "switch_editor", "select_object",
-        "highlight_net", "highlight_component", "zoom_to_object",
+        "ipc_session_info", "ipc_board_status", "ipc_move_footprint", "ipc_place_footprint", "ipc_add_track",
+        "ipc_save_board", "pcb_backend_policy", "launch_kicad", "live_status", "get_selection", "get_view_state",
+        "get_canvas_state", "switch_editor", "select_object", "highlight_net", "highlight_component", "zoom_to_object",
     ),
     "meta": ("get_agent_mode", "set_agent_mode", "require_approval", "get_tool_help", "suggest_next_actions"),
 }

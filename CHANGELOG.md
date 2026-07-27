@@ -6,6 +6,10 @@ All notable KiClaw changes are recorded here. The project follows semantic versi
 
 ### Added
 
+- **Project session lifecycle**: `create_new_project`, `open_project_session`, `save_project`, `close_project`, `get_active_project`.
+- **Library tools**: `search_symbols`, `search_footprints`, `get_symbol_info`, `get_footprint_info`, `list_*_libraries`, `create_project_library`, `import_symbol_to_project`, `import_footprint_to_project`.
+- **Fuller edit surface**: `delete_track`, `delete_via`, `place_footprint`, `create_zone`, `fill_zones` (honest limit), `lock/unlock_footprint`, `delete_component`, `delete_wire`, `rotate_component`, `dry_run_edit`, `validate_design_rules`, `generate_assembly_notes`.
+- **Live extras**: `ipc_save_board`, `ipc_place_footprint`/`ipc_add_track` (capability-honest when IPC incomplete).
 - **Rich inspection tools**: `list_project_files`, `get_project_structure`, `list_components`, `get_component_details`, `get_footprint_details`, `get_net_details`, `get_layer_stack`, `get_design_rules`, `find_objects`, `get_drc_errors`, `get_erc_errors`, `check_connectivity`, `get_transaction_history`.
 - **Manufacturing exports**: `export_bom`, `export_pos`/`export_cpl`, `export_netlist`, `export_pdf_schematic`, `create_release_package` (native kicad-cli).
 - **Guarded edit expansions**: `add_via`, `rotate_footprint`, `delete_footprint`, `set_footprint_property`, `add_net_label`, `move_component`, `set_component_value`, `place_power_symbol`.

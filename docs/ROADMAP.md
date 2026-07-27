@@ -25,13 +25,15 @@ AI client  --stdio MCP-->  kiclaw serve  -->  core (file-first) + optional IPC (
 | Phase | Focus | Status |
 |-------|--------|--------|
 | 0 | Foundation MCP + guarded edits + review | Done (v0.1) |
-| 1 | Deep analysis layer | Done (local; commit `feat: deep analysis`) |
-| 2 | Rich inspection + project structure | In progress |
-| 3 | Manufacturing BOM/CPL/release package | In progress |
-| 4 | Expanded guarded schematic/PCB edits | Next |
-| 5 | Library search/import | Next |
-| 6 | Live Visual Mode (observability → limited live edits → continuous) | Scaffold → expand |
+| 1 | Deep analysis layer | Done |
+| 2 | Rich inspection + project structure | Done |
+| 3 | Manufacturing BOM/CPL/release package | Done |
+| 4 | Expanded guarded schematic/PCB edits | Done (major surface) |
+| 5 | Library search/import | Done |
+| 6 | Live Visual Mode | Partial: launch + move + save attempt; highlight/place/track still IPC-limited |
 | 7 | Full matrix polish + CI matrix | Ongoing |
+
+**MCP tool count target:** 100+ public tools registered (inspect/edit/export/live/meta).
 
 ## Feature matrix (target)
 
