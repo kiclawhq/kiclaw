@@ -94,6 +94,7 @@ from .project_session import (
     open_project_session,
     save_project,
 )
+from .workbench import start_engineering_session
 
 logger = logging.getLogger("kiclaw")
 
@@ -627,6 +628,24 @@ def suggest_next_actions_tool(project: str | None = None) -> dict[str, Any]:
     return suggest_next_actions(project)
 
 
+@mcp.tool(name="start_engineering_session")
+def start_engineering_session_tool(
+    project: str | None = None,
+    create_name: str | None = None,
+    create_directory: str | None = None,
+    launch: bool = True,
+    mode: str = "live",
+) -> dict[str, Any]:
+    """Product entry: set project, launch KiCad, return split-screen workbench guide (terminal + live canvas)."""
+    return start_engineering_session(
+        project,
+        create_name=create_name,
+        create_directory=create_directory,
+        launch=launch,
+        mode=mode,
+    )
+
+
 # --- Full-surface expansion: project, library, remaining edits, live extras ---
 
 @mcp.tool(name="create_new_project")
@@ -819,7 +838,10 @@ _TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "ipc_save_board", "pcb_backend_policy", "launch_kicad", "live_status", "get_selection", "get_view_state",
         "get_canvas_state", "switch_editor", "select_object", "highlight_net", "highlight_component", "zoom_to_object",
     ),
-    "meta": ("get_agent_mode", "set_agent_mode", "require_approval", "get_tool_help", "suggest_next_actions"),
+    "meta": (
+        "get_agent_mode", "set_agent_mode", "require_approval", "get_tool_help", "suggest_next_actions",
+        "start_engineering_session",
+    ),
 }
 
 

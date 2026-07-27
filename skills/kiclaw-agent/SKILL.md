@@ -51,11 +51,41 @@ Default to **Inspect → Analyze → (optional Edit) → Release**. Live mode is
 - Run `run_si` and `run_thermal` as triage indicators only; escalate to stackup-aware SI/PI and thermal simulation when they flag a design or when the requirement is safety-critical.
 - Keep IPC and file backends session-pinned; refuse a write when the expected hash is stale.
 
-## Live Visual Mode (current vs future)
+## Product layout (split screen)
 
-- **Current:** file-first mutations and optional one-shot `ipc_move_footprint` when the API Server is up; no continuous canvas control, no editor switching, no highlight streaming.
-- **Future:** opt-in Live Visual Mode with visible Schematic/PCB operation, native Undo, unsaved-by-default documents, and the same snapshot/verify contract.
-- Never promise live visual operation unless the capability matrix shows a reachable board API.
+This is the experience we optimize for:
+
+```text
+┌─────────────────────────┬─────────────────────────┐
+│  LEFT: Terminal / AI    │  RIGHT: KiCad GUI       │
+│  kiclaw chat  OR        │  PCB / Schematic editor │
+│  AI client + MCP serve  │  shows tool results     │
+└─────────────────────────┴─────────────────────────┘
+```
+
+### How the user starts
+
+```bash
+# One command product entry
+kiclaw start /path/to/project
+# or create + open
+kiclaw start --new MyBoard --dir ~/Documents
+
+# Left terminal interactive commands
+kiclaw chat
+
+# Left terminal for full AI (Claude/Codex MCP)
+kiclaw serve
+```
+
+Or from MCP: call `start_engineering_session` first, then execute the user's PCB request.
+
+### Live Visual Mode (current vs future)
+
+- **Current:** file-first mutations + optional live `ipc_move_footprint` when API Server is on; `launch_kicad` + `start_engineering_session` for the split-screen product.
+- File edits may require reloading the board in KiCad if IPC is off.
+- **Future:** richer live place/route/highlight/switch-editor as KiCad IPC allows.
+- Never claim live canvas success unless `live_status` / capability shows a reachable board API.
 
 ## Reporting contract
 

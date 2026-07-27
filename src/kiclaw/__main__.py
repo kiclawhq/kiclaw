@@ -75,14 +75,69 @@ def main() -> None:
     custom_component.add_argument("--value")
     custom_component.add_argument("--rotation", type=float, default=0.0)
     custom_component.add_argument("--expected-sha256")
-    serve = commands.add_parser("serve", help="run the MCP server")
+    serve = commands.add_parser("serve", help="run the MCP server (left terminal: AI tools)")
     serve.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=3334)
     serve.add_argument("--verbose", action="store_true", help="show detailed MCP tool progress on stderr")
+    start = commands.add_parser(
+        "start",
+        help="product entry: open KiCad + session for split-screen (terminal left, KiCad right)",
+    )
+    start.add_argument("project", nargs="?", help="existing project directory or .kicad_pro")
+    start.add_argument("--new", dest="new_name", help="create a new project with this name")
+    start.add_argument("--dir", dest="new_dir", help="parent directory for --new (default: cwd)")
+    start.add_argument("--no-launch", action="store_true", help="do not launch KiCad GUI")
+    start.add_argument("--mode", default="live", choices=["live", "edit", "inspect", "fab", "review"])
+    start.add_argument("--json", action="store_true", help="print full JSON instead of human guide")
+    start.add_argument(
+        "--then",
+        choices=["none", "chat", "serve"],
+        default="none",
+        help="after session start: open local chat REPL or MCP serve",
+    )
+    chat = commands.add_parser("chat", help="interactive left-terminal REPL (commands next to live KiCad)")
+    chat.add_argument("project", nargs="?", help="optional project to activate")
+    workbench = commands.add_parser("workbench", help="alias for start (split-screen product session)")
+    workbench.add_argument("project", nargs="?", help="existing project directory or .kicad_pro")
+    workbench.add_argument("--new", dest="new_name", help="create a new project with this name")
+    workbench.add_argument("--dir", dest="new_dir", help="parent directory for --new")
+    workbench.add_argument("--no-launch", action="store_true")
+    workbench.add_argument("--mode", default="live", choices=["live", "edit", "inspect", "fab", "review"])
+    workbench.add_argument("--json", action="store_true")
+    workbench.add_argument("--then", choices=["none", "chat", "serve"], default="none")
     args = parser.parse_args()
     if args.command == "doctor":
         print(json.dumps(capability_report(), indent=2))
+        return
+    if args.command in {"start", "workbench"}:
+        from .workbench import print_session, run_chat_repl, start_engineering_session
+
+        result = start_engineering_session(
+            args.project,
+            create_name=args.new_name,
+            create_directory=args.new_dir,
+            launch=not args.no_launch,
+            mode=args.mode,
+        )
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print_session(result)
+        if args.then == "chat":
+            run_chat_repl(result.get("project"))
+        elif args.then == "serve":
+            from .server import mcp
+            import logging
+
+            logging.basicConfig(level=logging.INFO, format="[KiClaw] %(message)s", stream=sys.stderr)
+            logging.getLogger("kiclaw").info("MCP server ready after workbench start")
+            mcp.run(transport="stdio")
+        return
+    if args.command == "chat":
+        from .workbench import run_chat_repl
+
+        run_chat_repl(args.project)
         return
     if args.command == "review":
         result = review_project(args.path)

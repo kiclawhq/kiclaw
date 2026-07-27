@@ -6,6 +6,8 @@ All notable KiClaw changes are recorded here. The project follows semantic versi
 
 ### Added
 
+- **Split-screen product workbench**: `kiclaw start` / `kiclaw workbench` launches KiCad, sets session mode, and prints the terminal-left / KiCad-right guide; MCP tool `start_engineering_session`.
+- **Interactive left-terminal REPL**: `kiclaw chat` for doctor/open/analyze/move/review without a cloud model; `start --then chat|serve` handoff.
 - **Project session lifecycle**: `create_new_project`, `open_project_session`, `save_project`, `close_project`, `get_active_project`.
 - **Library tools**: `search_symbols`, `search_footprints`, `get_symbol_info`, `get_footprint_info`, `list_*_libraries`, `create_project_library`, `import_symbol_to_project`, `import_footprint_to_project`.
 - **Fuller edit surface**: `delete_track`, `delete_via`, `place_footprint`, `create_zone`, `fill_zones` (honest limit), `lock/unlock_footprint`, `delete_component`, `delete_wire`, `rotate_component`, `dry_run_edit`, `validate_design_rules`, `generate_assembly_notes`.
