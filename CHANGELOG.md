@@ -6,6 +6,13 @@ All notable KiClaw changes are recorded here. The project follows semantic versi
 
 ### Added
 
+- **Rich inspection tools**: `list_project_files`, `get_project_structure`, `list_components`, `get_component_details`, `get_footprint_details`, `get_net_details`, `get_layer_stack`, `get_design_rules`, `find_objects`, `get_drc_errors`, `get_erc_errors`, `check_connectivity`, `get_transaction_history`.
+- **Manufacturing exports**: `export_bom`, `export_pos`/`export_cpl`, `export_netlist`, `export_pdf_schematic`, `create_release_package` (native kicad-cli).
+- **Guarded edit expansions**: `add_via`, `rotate_footprint`, `delete_footprint`, `set_footprint_property`, `add_net_label`, `move_component`, `set_component_value`, `place_power_symbol`.
+- **Deep analysis aliases**: `analyze_power_tree`, `analyze_decoupling`, `audit_protection`, `analyze_subcircuits`, `analyze_buses`, `analyze_passive_networks`.
+- **Live scaffolding**: `launch_kicad`, `live_status`, `render_board`, plus honest live-gated stubs for selection/highlight/zoom/switch_editor.
+- **Agent ops**: `get_agent_mode` / `set_agent_mode`, `require_approval`, `get_tool_help`, `suggest_next_actions`.
+- Roadmap at `docs/ROADMAP.md` (commit-per-feature policy + product outcome).
 - **Deep Analysis Layer** (`run_analysis` / `kiclaw analyze`): deterministic packs for power-tree inventory, decoupling proximity, connector protection audit, net-name clusters, ground strategy, and PCB pad connectivity gaps — with evidence, confidence, and explicit triage disclaimers.
 - Deep analysis is included in `review_board` / `review_project` under `checks.analysis`.
 - MCP tool `run_analysis` and progressive-disclosure verify-category registration.

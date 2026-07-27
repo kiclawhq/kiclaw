@@ -9,8 +9,47 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
+from .agent_ops import get_agent_mode, get_tool_help, require_approval, set_agent_mode, suggest_next_actions
+from .analysis import (
+    analyze_decoupling,
+    analyze_ground_strategy,
+    analyze_net_clusters,
+    analyze_power_tree,
+    analyze_protection,
+    build_analysis_context,
+)
 from .core import (add_component, add_custom_component, add_track, add_wire, backend_session_info, board_summary, capability_report, compatibility_report, datasheet_evidence, ipc_board_status, ipc_move_footprint, ipc_session_info, move_footprint, pcb_backend_policy, project_info, review_board, review_project, run_analysis, run_check, run_dfm, run_emc, run_export, run_si, run_spice, run_thermal, schematic_roundtrip_check, schematic_summary, spice_capability,
                    snapshot_create, snapshot_list, snapshot_restore)
+from .edit_ext import add_net_label, add_via, delete_footprint, move_component, place_power_symbol, rotate_footprint, set_component_value, set_footprint_property
+from .inspect_ext import (
+    check_connectivity,
+    find_objects,
+    get_component_details,
+    get_design_rules,
+    get_drc_errors,
+    get_erc_errors,
+    get_footprint_details,
+    get_layer_stack,
+    get_net_details,
+    get_project_structure,
+    get_transaction_history,
+    list_components,
+    list_project_files,
+)
+from .live import (
+    get_canvas_state,
+    get_selection,
+    get_view_state,
+    highlight_component,
+    highlight_net,
+    launch_kicad,
+    live_status,
+    render_board,
+    select_object,
+    switch_editor,
+    zoom_to_object,
+)
+from .manufacturing import create_release_package, export_bom, export_netlist, export_pdf_schematic, export_pos
 
 logger = logging.getLogger("kiclaw")
 
@@ -287,23 +326,309 @@ def ipc_move_footprint_tool(board: str, reference: str, x: float, y: float, rota
     return ipc_move_footprint(board, reference, x, y, rotation, expected_sha256)
 
 
+# --- Phase 2+: inspection, analysis aliases, manufacturing, edits, live, agent ---
+
+@mcp.tool(name="list_project_files")
+def list_project_files_tool(project: str) -> dict[str, Any]:
+    return list_project_files(project)
+
+
+@mcp.tool(name="get_project_structure")
+def get_project_structure_tool(project: str) -> dict[str, Any]:
+    return get_project_structure(project)
+
+
+@mcp.tool(name="list_components")
+def list_components_tool(schematic: str) -> dict[str, Any]:
+    return list_components(schematic)
+
+
+@mcp.tool(name="get_component_details")
+def get_component_details_tool(schematic: str, reference: str) -> dict[str, Any]:
+    return get_component_details(schematic, reference)
+
+
+@mcp.tool(name="get_footprint_details")
+def get_footprint_details_tool(board: str, reference: str) -> dict[str, Any]:
+    return get_footprint_details(board, reference)
+
+
+@mcp.tool(name="get_net_details")
+def get_net_details_tool(board: str, net_name: str) -> dict[str, Any]:
+    return get_net_details(board, net_name)
+
+
+@mcp.tool(name="get_layer_stack")
+def get_layer_stack_tool(board: str) -> dict[str, Any]:
+    return get_layer_stack(board)
+
+
+@mcp.tool(name="get_design_rules")
+def get_design_rules_tool(board: str) -> dict[str, Any]:
+    return get_design_rules(board)
+
+
+@mcp.tool(name="find_objects")
+def find_objects_tool(project_or_file: str, query: str, kinds: list[str] | None = None) -> dict[str, Any]:
+    return find_objects(project_or_file, query, kinds)
+
+
+@mcp.tool(name="get_drc_errors")
+def get_drc_errors_tool(board: str) -> dict[str, Any]:
+    return get_drc_errors(board)
+
+
+@mcp.tool(name="get_erc_errors")
+def get_erc_errors_tool(schematic: str) -> dict[str, Any]:
+    return get_erc_errors(schematic)
+
+
+@mcp.tool(name="check_connectivity")
+def check_connectivity_tool(board: str, a: str, b: str) -> dict[str, Any]:
+    return check_connectivity(board, a, b)
+
+
+@mcp.tool(name="get_transaction_history")
+def get_transaction_history_tool(board: str, limit: int = 20) -> dict[str, Any]:
+    return get_transaction_history(board, limit)
+
+
+@mcp.tool(name="analyze_power_tree")
+def analyze_power_tree_tool(board: str) -> dict[str, Any]:
+    return analyze_power_tree(build_analysis_context(board))
+
+
+@mcp.tool(name="analyze_decoupling")
+def analyze_decoupling_tool(board: str, max_distance_mm: float = 5.0) -> dict[str, Any]:
+    return analyze_decoupling(build_analysis_context(board), max_distance_mm)
+
+
+@mcp.tool(name="audit_protection")
+def audit_protection_tool(board: str, max_distance_mm: float = 15.0) -> dict[str, Any]:
+    return analyze_protection(build_analysis_context(board), max_distance_mm)
+
+
+@mcp.tool(name="analyze_subcircuits")
+def analyze_subcircuits_tool(board: str) -> dict[str, Any]:
+    """Net-cluster based functional block hints (name conventions only)."""
+    return analyze_net_clusters(build_analysis_context(board)) | {"alias": "net_clusters", "note": "Subcircuit detection is name/pattern based, not full SPICE topology."}
+
+
+@mcp.tool(name="analyze_buses")
+def analyze_buses_tool(board: str) -> dict[str, Any]:
+    return analyze_net_clusters(build_analysis_context(board)) | {"alias": "net_clusters", "focus": "bus"}
+
+
+@mcp.tool(name="analyze_passive_networks")
+def analyze_passive_networks_tool(board: str) -> dict[str, Any]:
+    """Passive-oriented view: decoupling pack + net clusters (triage only)."""
+    ctx = build_analysis_context(board)
+    return {
+        "ok": True,
+        "decoupling": analyze_decoupling(ctx),
+        "clusters": analyze_net_clusters(ctx),
+        "ground": analyze_ground_strategy(ctx),
+        "disclaimer": "Passive network detection is structural triage, not SPICE extraction.",
+    }
+
+
+@mcp.tool(name="export_bom")
+def export_bom_tool(schematic: str, output_file: str) -> dict[str, Any]:
+    return export_bom(schematic, output_file)
+
+
+@mcp.tool(name="export_pos")
+def export_pos_tool(board: str, output_file: str, side: str = "both", units: str = "mm") -> dict[str, Any]:
+    return export_pos(board, output_file, side, units)
+
+
+@mcp.tool(name="export_cpl")
+def export_cpl_tool(board: str, output_file: str, side: str = "both", units: str = "mm") -> dict[str, Any]:
+    """Alias for export_pos (component placement / CPL)."""
+    return export_pos(board, output_file, side, units)
+
+
+@mcp.tool(name="export_netlist")
+def export_netlist_tool(schematic: str, output_file: str, format: str = "kicadsexpr") -> dict[str, Any]:
+    return export_netlist(schematic, output_file, format)
+
+
+@mcp.tool(name="export_pdf_schematic")
+def export_pdf_schematic_tool(schematic: str, output_file: str) -> dict[str, Any]:
+    return export_pdf_schematic(schematic, output_file)
+
+
+@mcp.tool(name="create_release_package")
+def create_release_package_tool(project: str, output_directory: str) -> dict[str, Any]:
+    return create_release_package(project, output_directory)
+
+
+@mcp.tool(name="rotate_footprint")
+def rotate_footprint_tool(board: str, reference: str, rotation: float, expected_sha256: str | None = None) -> dict[str, Any]:
+    return rotate_footprint(board, reference, rotation, expected_sha256)
+
+
+@mcp.tool(name="add_via")
+def add_via_tool(board: str, net_name: str, x: float, y: float, size: float = 0.8, drill: float = 0.4, expected_sha256: str | None = None) -> dict[str, Any]:
+    return add_via(board, net_name, x, y, size, drill, expected_sha256)
+
+
+@mcp.tool(name="delete_footprint")
+def delete_footprint_tool(board: str, reference: str, expected_sha256: str | None = None) -> dict[str, Any]:
+    return delete_footprint(board, reference, expected_sha256)
+
+
+@mcp.tool(name="set_footprint_property")
+def set_footprint_property_tool(board: str, reference: str, property_name: str, value: str, expected_sha256: str | None = None) -> dict[str, Any]:
+    return set_footprint_property(board, reference, property_name, value, expected_sha256)
+
+
+@mcp.tool(name="add_net_label")
+def add_net_label_tool(schematic: str, name: str, x: float, y: float, rotation: float = 0.0, kind: str = "label", expected_sha256: str | None = None) -> dict[str, Any]:
+    return add_net_label(schematic, name, x, y, rotation, kind, expected_sha256)
+
+
+@mcp.tool(name="set_component_value")
+def set_component_value_tool(schematic: str, reference: str, value: str, expected_sha256: str | None = None) -> dict[str, Any]:
+    return set_component_value(schematic, reference, value, expected_sha256)
+
+
+@mcp.tool(name="move_component")
+def move_component_tool(schematic: str, reference: str, x: float, y: float, rotation: float | None = None, expected_sha256: str | None = None) -> dict[str, Any]:
+    return move_component(schematic, reference, x, y, rotation, expected_sha256)
+
+
+@mcp.tool(name="place_power_symbol")
+def place_power_symbol_tool(schematic: str, power_name: str, x: float, y: float, reference: str | None = None, expected_sha256: str | None = None) -> dict[str, Any]:
+    return place_power_symbol(schematic, power_name, x, y, reference, expected_sha256)
+
+
+@mcp.tool(name="launch_kicad")
+def launch_kicad_tool(project: str | None = None) -> dict[str, Any]:
+    return launch_kicad(project)
+
+
+@mcp.tool(name="live_status")
+def live_status_tool() -> dict[str, Any]:
+    return live_status()
+
+
+@mcp.tool(name="render_board")
+def render_board_tool(board: str, output_file: str) -> dict[str, Any]:
+    return render_board(board, output_file)
+
+
+@mcp.tool(name="get_selection")
+def get_selection_tool() -> dict[str, Any]:
+    return get_selection()
+
+
+@mcp.tool(name="get_view_state")
+def get_view_state_tool() -> dict[str, Any]:
+    return get_view_state()
+
+
+@mcp.tool(name="get_canvas_state")
+def get_canvas_state_tool() -> dict[str, Any]:
+    return get_canvas_state()
+
+
+@mcp.tool(name="switch_editor")
+def switch_editor_tool(editor: str) -> dict[str, Any]:
+    return switch_editor(editor)
+
+
+@mcp.tool(name="select_object")
+def select_object_tool(reference: str) -> dict[str, Any]:
+    return select_object(reference)
+
+
+@mcp.tool(name="highlight_net")
+def highlight_net_tool(net_name: str) -> dict[str, Any]:
+    return highlight_net(net_name)
+
+
+@mcp.tool(name="highlight_component")
+def highlight_component_tool(reference: str) -> dict[str, Any]:
+    return highlight_component(reference)
+
+
+@mcp.tool(name="zoom_to_object")
+def zoom_to_object_tool(reference: str) -> dict[str, Any]:
+    return zoom_to_object(reference)
+
+
+@mcp.tool(name="get_agent_mode")
+def get_agent_mode_tool() -> dict[str, Any]:
+    return get_agent_mode()
+
+
+@mcp.tool(name="set_agent_mode")
+def set_agent_mode_tool(mode: str, require_approval: bool = False) -> dict[str, Any]:
+    return set_agent_mode(mode, require_approval)
+
+
+@mcp.tool(name="require_approval")
+def require_approval_tool(enabled: bool = True) -> dict[str, Any]:
+    return require_approval(enabled)
+
+
+@mcp.tool(name="get_tool_help")
+def get_tool_help_tool(name: str) -> dict[str, Any]:
+    return get_tool_help(name)
+
+
+@mcp.tool(name="suggest_next_actions")
+def suggest_next_actions_tool(project: str | None = None) -> dict[str, Any]:
+    return suggest_next_actions(project)
+
+
 _TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
-    "inspect": ("capability_report", "compatibility_report", "open_project", "project_info", "datasheet_evidence", "get_board_status", "pcb_statistics", "list_footprints", "list_nets", "schematic_summary", "schematic_roundtrip_check"),
-    "verify": ("run_drc", "run_erc", "run_dfm", "run_emc", "run_si", "run_thermal", "run_analysis", "review_board", "review_project", "verify_last_action", "spice_capability", "run_spice"),
-    "export": ("export_gerbers", "export_drill", "export_svg", "export_ipc2581"),
+    "inspect": (
+        "capability_report", "compatibility_report", "open_project", "project_info", "list_project_files",
+        "get_project_structure", "datasheet_evidence", "get_board_status", "pcb_statistics", "list_footprints",
+        "list_nets", "list_components", "get_component_details", "get_footprint_details", "get_net_details",
+        "get_layer_stack", "get_design_rules", "find_objects", "schematic_summary", "schematic_roundtrip_check",
+        "get_transaction_history",
+    ),
+    "verify": (
+        "run_drc", "run_erc", "get_drc_errors", "get_erc_errors", "check_connectivity", "run_dfm", "run_emc",
+        "run_si", "run_thermal", "run_analysis", "analyze_power_tree", "analyze_decoupling", "audit_protection",
+        "analyze_subcircuits", "analyze_buses", "analyze_passive_networks", "review_board", "review_project",
+        "verify_last_action", "spice_capability", "run_spice",
+    ),
+    "export": (
+        "export_gerbers", "export_drill", "export_svg", "export_ipc2581", "export_bom", "export_pos",
+        "export_cpl", "export_netlist", "export_pdf_schematic", "create_release_package", "render_board",
+    ),
     "snapshot": ("snapshot_create", "snapshot_list", "snapshot_restore", "backend_session_info"),
-    "edit": ("add_track", "move_footprint", "add_wire", "add_component", "add_custom_component"),
-    "ipc": ("ipc_session_info", "ipc_board_status", "ipc_move_footprint", "pcb_backend_policy"),
+    "edit": (
+        "add_track", "add_via", "move_footprint", "rotate_footprint", "delete_footprint", "set_footprint_property",
+        "add_wire", "add_component", "add_custom_component", "add_net_label", "move_component", "set_component_value",
+        "place_power_symbol",
+    ),
+    "ipc": (
+        "ipc_session_info", "ipc_board_status", "ipc_move_footprint", "pcb_backend_policy", "launch_kicad",
+        "live_status", "get_selection", "get_view_state", "get_canvas_state", "switch_editor", "select_object",
+        "highlight_net", "highlight_component", "zoom_to_object",
+    ),
+    "meta": ("get_agent_mode", "set_agent_mode", "require_approval", "get_tool_help", "suggest_next_actions"),
 }
 
 
 def _routable_tools() -> dict[str, Any]:
     """Resolve the public MCP wrapper functions after module initialization."""
-    return {name: globals()[f"{name}_tool"] for names in _TOOL_CATEGORIES.values() for name in names if f"{name}_tool" in globals()} | {
+    tools: dict[str, Any] = {}
+    for names in _TOOL_CATEGORIES.values():
+        for name in names:
+            if f"{name}_tool" in globals():
+                tools[name] = globals()[f"{name}_tool"]
+            elif name in globals():
+                tools[name] = globals()[name]
+    # Explicit aliases for wrappers not named *_tool
+    tools.update({
         "capability_report": capability_report_tool,
         "open_project": open_project,
-        "datasheet_evidence": datasheet_evidence_tool,
-        "compatibility_report": compatibility_report_tool,
         "get_board_status": get_board_status,
         "pcb_statistics": pcb_statistics,
         "list_footprints": list_footprints,
@@ -314,27 +639,9 @@ def _routable_tools() -> dict[str, Any]:
         "export_drill": export_drill,
         "export_svg": export_svg,
         "export_ipc2581": export_ipc2581,
-        "snapshot_create": snapshot_create_tool,
-        "snapshot_list": snapshot_list_tool,
-        "snapshot_restore": snapshot_restore_tool,
-        "add_track": add_track_tool,
-        "move_footprint": move_footprint_tool,
         "verify_last_action": verify_last_action,
-        "review_board": review_board_tool,
-        "run_dfm": run_dfm_tool,
-        "run_emc": run_emc_tool,
-        "run_si": run_si_tool,
-        "run_thermal": run_thermal_tool,
-        "run_analysis": run_analysis_tool,
-        "spice_capability": spice_capability_tool,
-        "run_spice": run_spice_tool,
-        "review_project": review_project_tool,
-        "ipc_session_info": ipc_session_info_tool,
-        "backend_session_info": backend_session_info_tool,
-        "ipc_board_status": ipc_board_status_tool,
-        "ipc_move_footprint": ipc_move_footprint_tool,
-        "pcb_backend_policy": pcb_backend_policy_tool,
-    }
+    })
+    return tools
 
 
 @mcp.tool(name="list_tool_categories")
