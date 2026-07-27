@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
-from .core import (add_component, add_custom_component, add_track, add_wire, backend_session_info, board_summary, capability_report, compatibility_report, datasheet_evidence, ipc_board_status, ipc_move_footprint, ipc_session_info, move_footprint, pcb_backend_policy, project_info, review_board, review_project, run_check, run_dfm, run_emc, run_export, run_si, run_spice, run_thermal, schematic_roundtrip_check, schematic_summary, spice_capability,
+from .core import (add_component, add_custom_component, add_track, add_wire, backend_session_info, board_summary, capability_report, compatibility_report, datasheet_evidence, ipc_board_status, ipc_move_footprint, ipc_session_info, move_footprint, pcb_backend_policy, project_info, review_board, review_project, run_analysis, run_check, run_dfm, run_emc, run_export, run_si, run_spice, run_thermal, schematic_roundtrip_check, schematic_summary, spice_capability,
                    snapshot_create, snapshot_list, snapshot_restore)
 
-mcp = FastMCP("KiClaw", instructions="Use capability_report first. File-derived board statistics are approximate; ERC/DRC and exports come from KiCad.")
+logger = logging.getLogger("kiclaw")
+
+
+class KiClawMCP(FastMCP):
+    """FastMCP with human-readable stderr progress logs for operators."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        started = time.perf_counter()
+        logger.info("→ %s", name)
+        try:
+            result = await super().call_tool(name, arguments)
+        except Exception:
+            logger.exception("✗ %s failed", name)
+            raise
+        logger.info("✓ %s (%.2fs)", name, time.perf_counter() - started)
+        return result
+
+
+mcp = KiClawMCP("KiClaw", instructions="Use capability_report first. File-derived board statistics are approximate; ERC/DRC and exports come from KiCad.")
 
 
 @mcp.tool(name="capability_report")
@@ -219,6 +239,24 @@ def run_thermal_tool(board: str, profile: str = "conservative") -> dict[str, Any
     return run_thermal(board, profile)
 
 
+@mcp.tool(name="run_analysis")
+def run_analysis_tool(
+    board: str,
+    packs: list[str] | None = None,
+    max_decoupling_distance_mm: float = 5.0,
+    max_protection_distance_mm: float = 15.0,
+    strict_connectivity: bool = False,
+) -> dict[str, Any]:
+    """Run deterministic deep analysis: power tree, decoupling, protection, net clusters, ground, connectivity."""
+    return run_analysis(
+        board,
+        packs=packs,
+        max_decoupling_distance_mm=max_decoupling_distance_mm,
+        max_protection_distance_mm=max_protection_distance_mm,
+        strict_connectivity=strict_connectivity,
+    )
+
+
 @mcp.tool(name="review_project")
 def review_project_tool(project: str) -> dict[str, Any]:
     """Review every board and schematic in a project with evidence-labelled findings."""
@@ -251,7 +289,7 @@ def ipc_move_footprint_tool(board: str, reference: str, x: float, y: float, rota
 
 _TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "inspect": ("capability_report", "compatibility_report", "open_project", "project_info", "datasheet_evidence", "get_board_status", "pcb_statistics", "list_footprints", "list_nets", "schematic_summary", "schematic_roundtrip_check"),
-    "verify": ("run_drc", "run_erc", "run_dfm", "run_emc", "run_si", "run_thermal", "review_board", "review_project", "verify_last_action", "spice_capability", "run_spice"),
+    "verify": ("run_drc", "run_erc", "run_dfm", "run_emc", "run_si", "run_thermal", "run_analysis", "review_board", "review_project", "verify_last_action", "spice_capability", "run_spice"),
     "export": ("export_gerbers", "export_drill", "export_svg", "export_ipc2581"),
     "snapshot": ("snapshot_create", "snapshot_list", "snapshot_restore", "backend_session_info"),
     "edit": ("add_track", "move_footprint", "add_wire", "add_component", "add_custom_component"),
@@ -287,6 +325,7 @@ def _routable_tools() -> dict[str, Any]:
         "run_emc": run_emc_tool,
         "run_si": run_si_tool,
         "run_thermal": run_thermal_tool,
+        "run_analysis": run_analysis_tool,
         "spice_capability": spice_capability_tool,
         "run_spice": run_spice_tool,
         "review_project": review_project_tool,
@@ -336,7 +375,7 @@ def capabilities_resource() -> str:
 @mcp.prompt()
 def review_for_manufacturing(board: str) -> str:
     """A concise workflow prompt for a safe board review."""
-    return f"Inspect {board}, call capability_report first, then review_project for the project-level report or review_board for one board. Treat approximate fields as estimates. Explain every finding with its source, evidence, severity, and confidence before proposing a guarded edit. Export IPC-2581 and other fabrication files only after review."
+    return f"Inspect {board}, call capability_report first, then run_analysis for deep structural packs (power/decoupling/protection/ground/connectivity) and review_project for the full project report (or review_board for one board). Treat approximate fields as estimates. Explain every finding with its source, evidence, severity, and confidence before proposing a guarded edit. Export IPC-2581 and other fabrication files only after review."
 
 
 def server_version() -> str:

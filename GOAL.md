@@ -20,6 +20,10 @@ The first IPC slice includes optional session/active-board probes and a guarded 
 
 Extend the trusted loop into a project-level engineering review: combine native DRC/ERC with conservative deterministic checks, emit evidence-labelled findings with confidence and source, expose a CI-friendly JSON report, and export IPC-2581 through KiCad's CLI. This milestone deliberately does not claim datasheet-backed, EMC, SPICE, or full schematic-write capabilities yet; those require separate adapters and regression suites.
 
+## Deep Analysis Layer (priority)
+
+Add a deterministic, evidence-labelled analysis surface inspired by high-quality structural review workflows (power inventory, decoupling, protection, net clustering, ground strategy, connectivity gaps). Integrate into `review_project` without claiming datasheet Vout, ESD ratings, or lab EMC. Packs are file-parse only; native KiCad remains the verification source of truth.
+
 ## Schematic fidelity next step
 
 The first schematic slice provides structural verification plus guarded `add_wire`, constrained `add_component`, and project-local `add_custom_component` mutations. `add_component` clones an existing symbol instance from `lib_symbols`, assigns fresh UUIDs, changes reference/value/placement, verifies the semantic count and round-trip, and runs ERC. `add_custom_component` clones a known-good definition, consistently renames nested symbol identities, writes a registered `.kicad_sym`/`sym-lib-table`, and rejects/rolls back if native KiCad cannot load the result. Arbitrary hand-authored geometry and datasheet-driven generation remain future work.

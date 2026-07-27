@@ -7,7 +7,8 @@
 ## Verified complete
 
 - MCP server exposes tools, `kicad://capabilities`, and a manufacturing-review prompt.
-- CLI commands cover discovery, compatibility, project review, DFM/EMC/SI/thermal indicators, SPICE capability, schematic checks/mutations, and serving.
+- CLI commands cover discovery, compatibility, project review, DFM/EMC/SI/thermal indicators, deep analysis (`analyze`), SPICE capability, schematic checks/mutations, and serving.
+- Deep Analysis Layer packs (power tree, decoupling, protection, net clusters, ground, connectivity) integrate into `review_board` / `review_project`.
 - KiCad 10.0.4 is detected from the bundled macOS executable without requiring `PATH` changes.
 - File-backed PCB and schematic mutations use snapshots, SHA-256 stale-write guards, atomic replacement, transaction manifests, rollback, semantic verification, and structured diffs.
 - Optional IPC support reports unavailable states honestly and supports one native undoable footprint move when KiCad's API Server is reachable.

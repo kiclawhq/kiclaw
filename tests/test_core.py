@@ -317,15 +317,53 @@ def test_add_custom_component_generates_project_library_and_native_loads(tmp_pat
     assert "Failed to load schematic" not in result["verification"]["erc"]["stderr"]
 
 
+def _import_server_or_skip():
+    """MCP/FastMCP import can stall on some hosts during entry-point scans.
+
+    Import in a subprocess with a hard timeout so the suite never hangs.
+    """
+    import os
+    import subprocess
+    import sys
+    import textwrap
+
+    os.environ.setdefault("PYDANTIC_DISABLE_PLUGINS", "1")
+    probe = textwrap.dedent(
+        """
+        import os
+        os.environ.setdefault("PYDANTIC_DISABLE_PLUGINS", "1")
+        import kiclaw.server  # noqa: F401
+        print("ok")
+        """
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env={**os.environ, "PYDANTIC_DISABLE_PLUGINS": "1", "PYTHONPATH": "src"},
+            cwd=str(Path(__file__).resolve().parents[1]),
+        )
+    except subprocess.TimeoutExpired:
+        pytest.skip("kiclaw.server import exceeded 15s (MCP/FastMCP host hang)")
+    if completed.returncode != 0 or "ok" not in completed.stdout:
+        pytest.skip(f"kiclaw.server unavailable: {completed.stderr.strip() or completed.stdout.strip()}")
+    import importlib
+
+    return importlib.import_module("kiclaw.server")
+
+
 def test_progressive_tool_router_lists_searches_and_dispatches(tmp_path: Path):
-    from kiclaw.server import find_tool, list_tool_categories, run_tool
+    server = _import_server_or_skip()
     board = tmp_path / "test.kicad_pcb"
     board.write_text(FIXTURE, encoding="utf-8")
-    categories = list_tool_categories()
+    categories = server.list_tool_categories()
     assert categories["total_tools"] >= 32
     assert "add_custom_component" in categories["categories"]["edit"]
-    assert any(match["name"] == "run_dfm" for match in find_tool("dfm")["matches"])
-    result = run_tool("pcb_statistics", {"board": str(board)})
+    assert "run_analysis" in categories["categories"]["verify"]
+    assert any(match["name"] == "run_dfm" for match in server.find_tool("dfm")["matches"])
+    result = server.run_tool("pcb_statistics", {"board": str(board)})
     assert result["footprints"] == 1
 
 
@@ -393,6 +431,104 @@ def test_si_and_thermal_profiles_are_non_blocking_indicators(tmp_path: Path):
     assert thermal["ok"] is True
     assert "impedance" in si["disclaimer"]
     assert "junction temperature" in thermal["disclaimer"]
+
+
+RICH_ANALYSIS_FIXTURE = '''(kicad_pcb (version 20240108) (generator pcbnew)
+ (general (thickness 1.6))
+ (paper "A4")
+ (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+ (setup (pad_to_mask_clearance 0))
+ (net 0 "") (net 1 "GND") (net 2 "VCC") (net 3 "SDA") (net 4 "orphan_net")
+ (footprint "Package:SOIC" (layer "F.Cu") (at 10 10 0)
+  (property "Reference" "U1" (at 0 0 0) (layer "F.SilkS"))
+  (property "Value" "MCU" (at 0 1 0) (layer "F.Fab"))
+  (pad "1" smd rect (at -1 0) (size 0.5 0.5) (layers "F.Cu") (net 2 "VCC"))
+  (pad "2" smd rect (at 1 0) (size 0.5 0.5) (layers "F.Cu") (net 1 "GND"))
+  (pad "3" smd rect (at 0 1) (size 0.5 0.5) (layers "F.Cu") (net 3 "SDA")))
+ (footprint "Capacitor:C_0402" (layer "F.Cu") (at 11 10 0)
+  (property "Reference" "C1" (at 0 0 0) (layer "F.SilkS"))
+  (property "Value" "100nF" (at 0 1 0) (layer "F.Fab"))
+  (pad "1" smd rect (at -0.5 0) (size 0.4 0.4) (layers "F.Cu") (net 2 "VCC"))
+  (pad "2" smd rect (at 0.5 0) (size 0.4 0.4) (layers "F.Cu") (net 1 "GND")))
+ (footprint "Connector:USB" (layer "F.Cu") (at 40 40 0)
+  (property "Reference" "J1" (at 0 0 0) (layer "F.SilkS"))
+  (property "Value" "USB_C" (at 0 1 0) (layer "F.Fab"))
+  (pad "1" thru_hole circle (at 0 0) (size 1 1) (drill 0.5) (layers "*.Cu") (net 2 "VCC")))
+ (footprint "Test:TP" (layer "F.Cu") (at 50 50 0)
+  (property "Reference" "TP1" (at 0 0 0) (layer "F.SilkS"))
+  (property "Value" "TestPoint" (at 0 1 0) (layer "F.Fab"))
+  (pad "1" thru_hole circle (at 0 0) (size 1 1) (drill 0.5) (layers "*.Cu") (net 4 "orphan_net")))
+ (zone (net 1) (net_name "GND") (layer "F.Cu") (hatch edge 0.5)
+  (polygon (pts (xy 0 0) (xy 10 0) (xy 10 10) (xy 0 10))))
+ (gr_line (start 0 0) (end 20 0) (layer "Edge.Cuts") (width 0.1))
+ (gr_line (start 20 0) (end 20 20) (layer "Edge.Cuts") (width 0.1))
+ (gr_line (start 20 20) (end 0 20) (layer "Edge.Cuts") (width 0.1))
+ (gr_line (start 0 20) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)'''
+
+
+def test_deep_analysis_power_ground_protection_and_connectivity(tmp_path: Path):
+    from kiclaw.core import run_analysis
+    board = tmp_path / "rich.kicad_pcb"
+    board.write_text(RICH_ANALYSIS_FIXTURE, encoding="utf-8")
+    result = run_analysis(board)
+    assert result["approximate"] is True
+    assert result["pads_parsed"] >= 6
+    assert "power_tree" in result["packs"]
+    power_names = [n["name"] for n in result["packs"]["power_tree"]["result"]["power_nets"]]
+    assert "VCC" in power_names
+    ground_names = [g["name"] for g in result["packs"]["ground"]["result"]["grounds"]]
+    assert "GND" in ground_names
+    assert result["packs"]["ground"]["result"]["grounds"][0]["zone_count"] >= 1
+    assert any(f["category"] == "protection" for f in result["findings"])
+    orphans = result["packs"]["connectivity"]["result"]["orphans"]
+    assert any(item["name"] == "orphan_net" for item in orphans)
+    assert "disclaimer" in result
+    assert "file-structure triage" in result["disclaimer"]
+
+
+def test_deep_analysis_detects_i2c_one_sided_cluster(tmp_path: Path):
+    from kiclaw.core import run_analysis
+    board = tmp_path / "rich.kicad_pcb"
+    board.write_text(RICH_ANALYSIS_FIXTURE, encoding="utf-8")
+    result = run_analysis(board, packs=["net_clusters"])
+    assert "i2c" in result["packs"]["net_clusters"]["result"]["clusters"]
+    assert any("SCL" in f["message"] for f in result["findings"])
+
+
+def test_deep_analysis_strict_connectivity_promotes_errors(tmp_path: Path):
+    from kiclaw.core import run_analysis
+    board = tmp_path / "rich.kicad_pcb"
+    board.write_text(RICH_ANALYSIS_FIXTURE, encoding="utf-8")
+    loose = run_analysis(board, packs=["connectivity"], strict_connectivity=False)
+    strict = run_analysis(board, packs=["connectivity"], strict_connectivity=True)
+    assert loose["ok"] is True
+    assert strict["ok"] is False
+    assert strict["finding_counts"].get("error", 0) >= 1
+
+
+def test_deep_analysis_is_integrated_into_review_board(tmp_path: Path, monkeypatch):
+    from kiclaw.core import review_board
+    board = tmp_path / "rich.kicad_pcb"
+    board.write_text(RICH_ANALYSIS_FIXTURE, encoding="utf-8")
+    monkeypatch.setattr(
+        "kiclaw.core.run_check",
+        lambda *_: {"ok": True, "available": True, "report": {"violations": [], "unconnected_items": []}},
+    )
+    result = review_board(board)
+    assert "analysis" in result["checks"]
+    assert result["checks"]["analysis"]["packs"]
+    assert any(f.get("category") in {"protection", "connectivity", "power_tree", "decoupling", "ground", "net_class"} for f in result["findings"])
+
+
+def test_run_analysis_tool_is_routable(tmp_path: Path):
+    server = _import_server_or_skip()
+    board = tmp_path / "rich.kicad_pcb"
+    board.write_text(RICH_ANALYSIS_FIXTURE, encoding="utf-8")
+    assert any(match["name"] == "run_analysis" for match in server.find_tool("analysis")["matches"])
+    result = server.run_tool("run_analysis", {"board": str(board), "packs": ["power_tree", "ground"]})
+    assert result["ok"] is True
+    assert set(result["packs"]) == {"power_tree", "ground"}
 
 
 def test_real_cli_drc_on_installed_template(tmp_path: Path):

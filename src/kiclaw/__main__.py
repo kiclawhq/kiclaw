@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import sys
 
-from .core import add_component, add_custom_component, add_wire, capability_report, compatibility_report, datasheet_evidence, review_project, run_dfm, run_emc, run_si, run_spice, run_thermal, schematic_roundtrip_check, spice_capability
+from .core import add_component, add_custom_component, add_wire, capability_report, compatibility_report, datasheet_evidence, review_project, run_analysis, run_dfm, run_emc, run_si, run_spice, run_thermal, schematic_roundtrip_check, spice_capability
 
 
 def main() -> None:
@@ -28,6 +30,14 @@ def main() -> None:
     thermal = commands.add_parser("thermal", help="run conservative thermal indicators")
     thermal.add_argument("path", help=".kicad_pcb file")
     thermal.add_argument("--profile", default="conservative", choices=["conservative"])
+    analyze = commands.add_parser("analyze", help="run deterministic deep analysis packs (power, decoupling, protection, …)")
+    analyze.add_argument("path", help=".kicad_pcb file")
+    analyze.add_argument("--packs", help="comma-separated packs: power_tree,decoupling,protection,net_clusters,ground,connectivity")
+    analyze.add_argument("--max-decoupling-distance", type=float, default=5.0)
+    analyze.add_argument("--max-protection-distance", type=float, default=15.0)
+    analyze.add_argument("--strict-connectivity", action="store_true", help="promote single-pad nets to error severity")
+    analyze.add_argument("--output", help="also write the JSON report to this file")
+    analyze.add_argument("--fail-on-warning", action="store_true")
     evidence = commands.add_parser("evidence", help="hash a datasheet artifact and score explicit text claims")
     evidence.add_argument("source", help="local path or http(s) URL")
     evidence.add_argument("--claim", action="append", dest="claims", default=[])
@@ -69,6 +79,7 @@ def main() -> None:
     serve.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=3334)
+    serve.add_argument("--verbose", action="store_true", help="show detailed MCP tool progress on stderr")
     args = parser.parse_args()
     if args.command == "doctor":
         print(json.dumps(capability_report(), indent=2))
@@ -99,6 +110,25 @@ def main() -> None:
         return
     if args.command == "thermal":
         print(json.dumps(run_thermal(args.path, args.profile), indent=2))
+        return
+    if args.command == "analyze":
+        packs = [item.strip() for item in args.packs.split(",") if item.strip()] if args.packs else None
+        result = run_analysis(
+            args.path,
+            packs=packs,
+            max_decoupling_distance_mm=args.max_decoupling_distance,
+            max_protection_distance_mm=args.max_protection_distance,
+            strict_connectivity=args.strict_connectivity,
+        )
+        rendered = json.dumps(result, indent=2)
+        print(rendered)
+        if args.output:
+            from pathlib import Path
+            output = Path(args.output).expanduser().resolve()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(rendered + "\n", encoding="utf-8")
+        if not result["ok"] or (args.fail_on_warning and result.get("finding_counts", {}).get("warning", 0)):
+            raise SystemExit(1)
         return
     if args.command == "evidence":
         print(json.dumps(datasheet_evidence(args.source, args.claims, args.max_bytes), indent=2))
@@ -133,6 +163,12 @@ def main() -> None:
     # MCP's optional web/session dependencies.
     from .server import mcp
 
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="[KiClaw] %(message)s",
+        stream=sys.stderr,
+    )
+    logging.getLogger("kiclaw").info("MCP server ready | transport=%s", args.transport)
     mcp.settings.host, mcp.settings.port = args.host, args.port
     mcp.run(transport=args.transport)
 

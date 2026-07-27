@@ -1257,7 +1257,33 @@ def run_thermal(board: str | Path, profile: str = "conservative") -> dict[str, A
             "disclaimer": "Indicators do not compute junction temperature, thermal resistance, airflow, or derating against a datasheet."}
 
 
-def review_board(board: str | Path) -> dict[str, Any]:
+def run_analysis(
+    board: str | Path,
+    packs: list[str] | tuple[str, ...] | None = None,
+    *,
+    max_decoupling_distance_mm: float = 5.0,
+    max_protection_distance_mm: float = 15.0,
+    strict_connectivity: bool = False,
+) -> dict[str, Any]:
+    """Run deterministic deep analysis packs (power, decoupling, protection, …)."""
+    # Lazy import keeps core loadable without circular imports at module import time.
+    from .analysis import run_analysis as _run_analysis
+
+    return _run_analysis(
+        board,
+        packs=packs,
+        max_decoupling_distance_mm=max_decoupling_distance_mm,
+        max_protection_distance_mm=max_protection_distance_mm,
+        strict_connectivity=strict_connectivity,
+    )
+
+
+def run_deep_analysis(board: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Alias for :func:`run_analysis`."""
+    return run_analysis(board, **kwargs)
+
+
+def review_board(board: str | Path, include_analysis: bool = True) -> dict[str, Any]:
     """Produce an evidence-labelled native plus deterministic manufacturing review."""
     summary = board_summary(board)
     drc = run_check("drc", board)
@@ -1265,7 +1291,10 @@ def review_board(board: str | Path) -> dict[str, Any]:
     emc = run_emc(board)
     si = run_si(board)
     thermal = run_thermal(board)
+    analysis = run_analysis(board) if include_analysis else None
     findings = list(dfm["findings"]) + list(emc["findings"]) + list(si["findings"]) + list(thermal["findings"])
+    if analysis is not None:
+        findings.extend(analysis["findings"])
     report = drc.get("report")
     if isinstance(report, dict):
         for violation in report.get("violations", []):
@@ -1282,10 +1311,13 @@ def review_board(board: str | Path) -> dict[str, Any]:
                                  drc.get("reason", "KiCad DRC returned no report"), "high"))
     counts = _finding_counts(findings)
     blocking = sum(counts.get(severity, 0) for severity in ("error", "critical", "unknown"))
+    checks: dict[str, Any] = {"drc": drc, "dfm": dfm, "emc": emc, "si": si, "thermal": thermal}
+    if analysis is not None:
+        checks["analysis"] = analysis
     return {
         "ok": drc.get("ok") is True and blocking == 0,
         "board": summary,
-        "checks": {"drc": drc, "dfm": dfm, "emc": emc, "si": si, "thermal": thermal},
+        "checks": checks,
         "findings": findings,
         "finding_counts": counts,
         "confidence": "high" if isinstance(report, dict) else "medium",

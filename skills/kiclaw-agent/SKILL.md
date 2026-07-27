@@ -7,18 +7,31 @@ description: Safely inspect, edit, verify, repair, and review KiCad projects thr
 
 Use KiClaw as a guarded engineering workflow, not as an unverified text editor.
 
+## Operating modes
+
+| Mode | When | Tools |
+|------|------|--------|
+| **Inspect** | First look / unknown project | `capability_report`, `compatibility_report`, `open_project`, `get_board_status`, `run_analysis` |
+| **Analyze** | Design review without edits | `run_analysis`, `run_dfm`/`run_emc`/`run_si`/`run_thermal`, `review_project` |
+| **Edit** | Guarded mutations only after inspect | snapshot → narrow mutator → native verify |
+| **Release** | Manufacturing package | review pass + exports; keep transaction evidence |
+| **Live** (optional future/limited) | Only when IPC session is real | `ipc_*` tools; never claim live success if unavailable |
+
+Default to **Inspect → Analyze → (optional Edit) → Release**. Live mode is opt-in and never replaces snapshots/verification.
+
 ## Required loop
 
 1. Call `capability_report` and `compatibility_report` first. Record KiCad version, CLI availability, IPC availability, concrete fixture checks, and limitations.
 2. Call `open_project` or `project_info` and identify the exact board/schematic in scope.
 3. Inspect before editing with `get_board_status`, `pcb_statistics`, `list_footprints`, `list_nets`, or `schematic_summary`.
-4. Create a snapshot before every mutation. For file edits, retain the returned SHA-256 and pass it as `expected_sha256`.
-5. Use the narrowest mutation tool. Call `pcb_backend_policy` or inspect `capability_report`; prefer IPC edits when a live board API reports the requested document is addressable, otherwise use guarded file tools. Never invent a successful IPC result when the session is unavailable.
-6. After a mutation, inspect the structured diff and transaction ID. Confirm the intended count/property changed and no unrelated content changed.
-7. Verify with `schematic_roundtrip_check`, native `run_erc`/`run_drc`, and `run_dfm` as applicable. Treat KiCad-native failures as blocking, even when lightweight parsing succeeds.
-8. If verification fails, stop making new edits. Use the transaction snapshot to restore, re-inspect, and report the failure evidence.
-9. For a completed project, run `review_project` and return findings with severity, evidence, confidence, and source. Export only after review passes or the user explicitly accepts remaining findings.
-10. When a component decision needs source evidence, call `datasheet_evidence` with an explicit local/HTTP artifact and explicit claims. Report the artifact hash and claim matches; never turn a URL or keyword hit into an unconditional design guarantee.
+4. Run `run_analysis` for deep structural packs (power tree, decoupling, protection, net clusters, ground strategy, connectivity gaps). Treat pack findings as triage with confidence labels — not lab certification.
+5. Create a snapshot before every mutation. For file edits, retain the returned SHA-256 and pass it as `expected_sha256`.
+6. Use the narrowest mutation tool. Call `pcb_backend_policy` or inspect `capability_report`; prefer IPC edits when a live board API reports the requested document is addressable, otherwise use guarded file tools. Never invent a successful IPC result when the session is unavailable.
+7. After a mutation, inspect the structured diff and transaction ID. Confirm the intended count/property changed and no unrelated content changed.
+8. Verify with `schematic_roundtrip_check`, native `run_erc`/`run_drc`, and `run_dfm` as applicable. Treat KiCad-native failures as blocking, even when lightweight parsing succeeds.
+9. If verification fails, stop making new edits. Use the transaction snapshot to restore, re-inspect, and report the failure evidence.
+10. For a completed project, run `review_project` (includes deep analysis) and return findings with severity, evidence, confidence, and source. Export only after review passes or the user explicitly accepts remaining findings.
+11. When a component decision needs source evidence, call `datasheet_evidence` with an explicit local/HTTP artifact and explicit claims. Report the artifact hash and claim matches; never turn a URL or keyword hit into an unconditional design guarantee.
 
 ## Schematic rules
 
@@ -31,11 +44,18 @@ Use KiClaw as a guarded engineering workflow, not as an unverified text editor.
 
 - Treat lightweight board statistics as approximate.
 - Use KiCad CLI DRC and exports as ground truth.
+- Run `run_analysis` for structured power/ground/protection/decoupling/connectivity packs; do not invent regulator topologies or ESD ratings from names alone.
 - Run `run_dfm` with explicit profile parameters when minimum trace width, fiducials, or test points matter.
 - Run `run_emc` for conservative pre-compliance indicators; treat warnings as review prompts, not lab-equivalent certification.
 - Call `spice_capability` before `run_spice`; if ngspice is unavailable, report that state instead of fabricating simulation results.
 - Run `run_si` and `run_thermal` as triage indicators only; escalate to stackup-aware SI/PI and thermal simulation when they flag a design or when the requirement is safety-critical.
 - Keep IPC and file backends session-pinned; refuse a write when the expected hash is stale.
+
+## Live Visual Mode (current vs future)
+
+- **Current:** file-first mutations and optional one-shot `ipc_move_footprint` when the API Server is up; no continuous canvas control, no editor switching, no highlight streaming.
+- **Future:** opt-in Live Visual Mode with visible Schematic/PCB operation, native Undo, unsaved-by-default documents, and the same snapshot/verify contract.
+- Never promise live visual operation unless the capability matrix shows a reachable board API.
 
 ## Reporting contract
 
