@@ -195,5 +195,57 @@ def live_status() -> dict[str, Any]:
             "4. pip/uv install kiclaw[ipc] (kicad-python)",
             "5. capability_report / ipc_session_info until live_ready is true",
             "6. Prefer ipc_move_footprint / move_footprint backend=auto for visible moves",
+            "7. Call save_project(backend='ipc') after live edits when you want GUI state on disk",
         ],
+    }
+
+
+def ipc_save_board() -> dict[str, Any]:
+    """Attempt to save the active live PCB document via IPC."""
+    from .project_session import save_project
+
+    return save_project(backend="ipc")
+
+
+def ipc_place_footprint(board: str | Path, reference: str, x: float, y: float, rotation: float = 0.0) -> dict[str, Any]:
+    """Live place is not universally available; fall back message + file clone guidance."""
+    cap = ipc_capability()
+    if not (cap.get("available") and cap.get("board_api_available")):
+        return _live_unavailable("ipc_place_footprint") | {
+            "fallback": "Use place_footprint (file) cloning an existing footprint, then open/reload in KiCad.",
+            "reference": reference,
+            "at": [x, y, rotation],
+        }
+    return {
+        "ok": False,
+        "live": True,
+        "action": "ipc_place_footprint",
+        "reason": "Placing new footprints through kipy is version-specific and not stably exposed. Use file place_footprint or manual place.",
+        "capability": cap,
+        "planned": True,
+    }
+
+
+def ipc_add_track(
+    board: str | Path,
+    net_name: str,
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    width: float = 0.25,
+) -> dict[str, Any]:
+    cap = ipc_capability()
+    if not (cap.get("available") and cap.get("board_api_available")):
+        return _live_unavailable("ipc_add_track") | {
+            "fallback": "Use add_track (file backend) then reload board in KiCad, or enable API Server for future live track APIs.",
+        }
+    return {
+        "ok": False,
+        "live": True,
+        "action": "ipc_add_track",
+        "reason": "Live track insertion via IPC is not stably supported in this binding. Use add_track file tool.",
+        "capability": cap,
+        "planned": True,
+        "args": {"net_name": net_name, "start": [start_x, start_y], "end": [end_x, end_y], "width": width},
     }
