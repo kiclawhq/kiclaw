@@ -80,12 +80,22 @@ kiclaw serve
 
 Or from MCP: call `start_engineering_session` first, then execute the user's PCB request.
 
-### Live Visual Mode (current vs future)
+### Hybrid live model (official — see docs/PRODUCT.md)
 
-- **Current:** file-first mutations + optional live `ipc_move_footprint` when API Server is on; `launch_kicad` + `start_engineering_session` for the split-screen product.
-- File edits may require reloading the board in KiCad if IPC is off.
-- **Future:** richer live place/route/highlight/switch-editor as KiCad IPC allows.
-- Never claim live canvas success unless `live_status` / capability shows a reachable board API.
+We **do not** depend on deep unofficial GUI automation. We deliver a **live feeling** with:
+
+1. **Primary:** safe file-backed edits (snapshot → atomic → verify).
+2. **Visual update:** after each mutation call `refresh_kicad_view` and/or `narrate_mutation` so the user knows what to look at (IPC refresh if possible, else reload guidance).
+3. **Best-effort IPC:** use `ipc_move_footprint` only when `live_status` is ready; fall back to file immediately on failure.
+4. **Session:** `start_engineering_session` / `kiclaw workbench` launches KiCad, tries side-by-side layout, reports readiness.
+
+#### After every mutation, respond like this
+
+> I have [done X]. Snapshot created. Verification [passed/failed].  
+> Please look at [area / component]. Visual path: [ipc_refresh | file_reload_guidance].  
+> Would you like me to adjust anything or restore?
+
+Never claim full mouse/toolbar control of KiCad.
 
 ## Reporting contract
 

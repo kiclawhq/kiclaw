@@ -88,6 +88,7 @@ def main() -> None:
     start.add_argument("--new", dest="new_name", help="create a new project with this name")
     start.add_argument("--dir", dest="new_dir", help="parent directory for --new (default: cwd)")
     start.add_argument("--no-launch", action="store_true", help="do not launch KiCad GUI")
+    start.add_argument("--no-layout", action="store_true", help="do not attempt side-by-side window layout")
     start.add_argument("--mode", default="live", choices=["live", "edit", "inspect", "fab", "review"])
     start.add_argument("--json", action="store_true", help="print full JSON instead of human guide")
     start.add_argument(
@@ -98,14 +99,23 @@ def main() -> None:
     )
     chat = commands.add_parser("chat", help="interactive left-terminal REPL (commands next to live KiCad)")
     chat.add_argument("project", nargs="?", help="optional project to activate")
-    workbench = commands.add_parser("workbench", help="alias for start (split-screen product session)")
+    workbench = commands.add_parser(
+        "workbench",
+        help="primary product entry: hybrid live session (KiCad + chat; terminal left, canvas right)",
+    )
     workbench.add_argument("project", nargs="?", help="existing project directory or .kicad_pro")
     workbench.add_argument("--new", dest="new_name", help="create a new project with this name")
     workbench.add_argument("--dir", dest="new_dir", help="parent directory for --new")
     workbench.add_argument("--no-launch", action="store_true")
+    workbench.add_argument("--no-layout", action="store_true", help="do not attempt side-by-side window layout")
     workbench.add_argument("--mode", default="live", choices=["live", "edit", "inspect", "fab", "review"])
     workbench.add_argument("--json", action="store_true")
-    workbench.add_argument("--then", choices=["none", "chat", "serve"], default="none")
+    workbench.add_argument(
+        "--then",
+        choices=["none", "chat", "serve"],
+        default="chat",
+        help="after session start (default: chat REPL)",
+    )
     args = parser.parse_args()
     if args.command == "doctor":
         print(json.dumps(capability_report(), indent=2))
@@ -113,20 +123,22 @@ def main() -> None:
     if args.command in {"start", "workbench"}:
         from .workbench import print_session, run_chat_repl, start_engineering_session
 
+        then = args.then
         result = start_engineering_session(
             args.project,
             create_name=args.new_name,
             create_directory=args.new_dir,
             launch=not args.no_launch,
             mode=args.mode,
+            arrange_windows=not getattr(args, "no_layout", False),
         )
         if args.json:
             print(json.dumps(result, indent=2, default=str))
         else:
             print_session(result)
-        if args.then == "chat":
+        if then == "chat":
             run_chat_repl(result.get("project"))
-        elif args.then == "serve":
+        elif then == "serve":
             from .server import mcp
             import logging
 

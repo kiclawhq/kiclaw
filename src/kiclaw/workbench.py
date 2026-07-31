@@ -34,6 +34,7 @@ from .project_session import (
     open_project_session,
     save_project,
 )
+from .visual_update import arrange_side_by_side, narrate_mutation, refresh_kicad_view
 
 
 PRODUCT_BANNER = r"""
@@ -56,8 +57,13 @@ def start_engineering_session(
     create_directory: str | Path | None = None,
     launch: bool = True,
     mode: str = "live",
+    arrange_windows: bool = True,
 ) -> dict[str, Any]:
-    """Open a product session: optional project create, set active, launch KiCad, report readiness."""
+    """Open a product session: optional project create, set active, launch KiCad, report readiness.
+
+    Hybrid live model (see docs/PRODUCT.md): file-first safety + best-effort visual update,
+    not full unofficial GUI puppetry.
+    """
     steps: list[dict[str, Any]] = []
     project_path: Path | None = None
 
@@ -96,6 +102,11 @@ def start_engineering_session(
         launch_result = launch_kicad(project_path if project_path else None)
         steps.append({"launch_kicad": launch_result})
 
+    layout_result = None
+    if arrange_windows and launch:
+        layout_result = arrange_side_by_side()
+        steps.append({"arrange_side_by_side": layout_result})
+
     status = live_status()
     steps.append({"live_status": {
         "live_ready": status.get("live_ready"),
@@ -111,69 +122,78 @@ def start_engineering_session(
         board=board,
         live_ready=bool(status.get("live_ready")),
         launched=bool(launch_result and launch_result.get("ok")),
+        layout_ok=bool(layout_result and layout_result.get("ok")),
     )
 
     return {
         "ok": True,
-        "product": "KiClaw Live Engineering Workbench",
+        "product": "KiClaw Hybrid Live Engineering Workbench",
+        "architecture": "hybrid_live",
+        "principle": "File-first safety + best-effort visual update; no fake full GUI control.",
         "project": str(project_path) if project_path else None,
         "board": board,
         "live_ready": status.get("live_ready"),
         "launched_kicad": bool(launch_result and launch_result.get("ok")),
+        "window_layout": layout_result,
         "mode": mode,
         "steps": steps,
         "guide": guide,
         "banner": PRODUCT_BANNER.strip(),
         "next_user_actions": [
-            "Arrange windows: terminal LEFT, KiCad RIGHT",
-            "In KiCad: Preferences → Plugins → API Server → Enable (for live canvas)",
-            "Open the board in PCB Editor",
-            "In this terminal: run `kiclaw chat` for local commands OR connect an AI client to `kiclaw serve`",
-            "Prompt the AI: e.g. make a custom PCB / move footprint / run analysis",
+            "Keep THIS terminal on the LEFT and KiCad on the RIGHT (layout attempted automatically on macOS).",
+            "In KiCad: open the board in PCB Editor; enable Preferences → Plugins → API Server for better live feedback.",
+            "Type in `kiclaw chat` or connect an AI MCP client to `kiclaw serve`.",
+            "After edits: agent uses file-first safety + refresh_kicad_view so you know what to look at.",
+            "Prompt example: make a custom PCB / move a part / run analysis / export fab files.",
         ],
         "suggestions": suggest_next_actions(str(project_path) if project_path else None).get("suggestions"),
     }
 
 
-def _split_screen_guide(*, project_path: str | None, board: str | None, live_ready: bool, launched: bool) -> str:
+def _split_screen_guide(
+    *,
+    project_path: str | None,
+    board: str | None,
+    live_ready: bool,
+    launched: bool,
+    layout_ok: bool = False,
+) -> str:
     lines = [
         PRODUCT_BANNER.strip(),
+        "",
+        "## Hybrid live model (official)",
+        "Serious edits are file-backed (snapshot + atomic + verify).",
+        "Visual update is best-effort IPC refresh, else clear reload guidance.",
+        "We do NOT claim full mouse/toolbar automation of KiCad.",
         "",
         "## Session",
         f"- Project: {project_path or '(none — pass a path or use --new NAME)'}",
         f"- Board:   {board or '(none yet)'}",
         f"- KiCad:   {'launched' if launched else 'not launched'}",
+        f"- Window layout: {'side-by-side attempted' if layout_ok else 'arrange manually (terminal left, KiCad right)'}",
         f"- Live IPC ready: {live_ready}",
         "",
-        "## How to work (product layout)",
-        "1. Put THIS terminal on the left half of the screen.",
-        "2. Put KiCad on the right half (PCB Editor for board work).",
-        "3. Talk to AI in the left terminal (MCP client) or type commands in `kiclaw chat`.",
-        "4. Watch the right-side KiCad window update:",
-        "   - Live IPC moves appear immediately when API Server is on.",
-        "   - File edits apply on disk; reload the board in KiCad if the view is stale.",
+        "## How to work",
+        "1. LEFT: this terminal (`kiclaw chat` or AI via MCP `serve`).",
+        "2. RIGHT: KiCad canvas (PCB/Schematic).",
+        "3. Describe what you want; agent edits safely.",
+        "4. Watch KiCad update (IPC when ready; else reload when told).",
         "",
-        "## Two left-terminal options",
-        "A) AI agent (recommended for 'make me a custom PCB'):",
-        "     Terminal:  kiclaw serve",
-        "     Connect Claude/Codex/Cursor MCP to that process, then chat naturally.",
-        "B) Local command REPL (no cloud model required):",
-        "     Terminal:  kiclaw chat",
-        "     Then: help | doctor | open PATH | analyze | move REF X Y | review | status",
+        "## Commands here (`kiclaw chat`)",
+        "help | doctor | status | start [path] | new NAME | open PATH | board PATH",
+        "launch | analyze | review | summary | move REF X Y | refresh | drc | save | quit",
         "",
-        "## Live canvas checklist (for true on-screen edits)",
-        "□ KiCad running",
-        "□ Preferences → Plugins → API Server → enabled",
+        "## Live feedback checklist (optional upgrade)",
+        "□ KiCad running with project open",
+        "□ Preferences → Plugins → API Server enabled",
         "□ Board open in PCB Editor",
-        "□ kiclaw[ipc] installed (kicad-python)",
-        "□ `kiclaw doctor` shows ipc.available / board_api_available",
+        "□ kiclaw[ipc] installed",
+        "□ `status` shows live_ready true",
         "",
-        "## Example prompts to your AI (left side)",
-        '- "Open this project and summarize the board"',
-        '- "Make me a custom PCB outline 50x50mm with 4 mounting holes"',
-        '- "Move J1 by 1mm and run DRC"',
-        '- "Run deep analysis and list protection gaps"',
-        '- "Export BOM and position file"',
+        "## Example prompts",
+        '- "Summarize this board and run analysis"',
+        '- "Move U1 5mm right and tell me what to look at"',
+        '- "Add decoupling notes / export BOM"',
     ]
     return "\n".join(lines) + "\n"
 
@@ -237,20 +257,22 @@ def _dispatch_chat(line: str, state: dict[str, Any]) -> dict[str, Any]:
                 "help": "this help",
                 "doctor": "capability matrix",
                 "status": "live + session status",
-                "start [path]": "start engineering session (launch KiCad)",
+                "start [path]": "start engineering session (launch KiCad + layout)",
                 "new NAME [DIR]": "create project and open session",
                 "open PATH": "set active project",
                 "board PATH": "set active board file",
                 "launch": "launch KiCad for current project",
+                "layout": "re-apply side-by-side window layout",
                 "analyze": "run deep analysis on active board",
                 "review": "review active project",
-                "move REF X Y": "move footprint (file backend; live if IPC ready)",
+                "move REF X Y": "move footprint (safe file path + visual refresh guidance)",
+                "refresh [path]": "post-edit visual update / reload guidance",
                 "summary": "board summary stats",
                 "save": "save project session",
                 "close": "close active project session",
                 "quit": "exit chat",
             },
-            "product_hint": "Keep KiCad on the other half of the screen while you type here.",
+            "product_hint": "Hybrid live: safe file edits + best-effort KiCad visual update. Terminal LEFT, KiCad RIGHT.",
         }
 
     if cmd == "doctor":
@@ -321,7 +343,26 @@ def _dispatch_chat(line: str, state: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "usage: move REF X Y"}
         board = state.get("board") or _require_board(state)
         ref, x, y = args[0], float(args[1]), float(args[2])
-        return move_footprint(board, ref, x, y, backend="auto")
+        mutation = move_footprint(board, ref, x, y, backend="auto")
+        narration = narrate_mutation(
+            action="move_footprint",
+            path=board,
+            summary=f"Moved footprint `{ref}` to ({x}, {y}).",
+            look_at=f"PCB canvas near `{ref}`",
+            transaction_id=mutation.get("transaction_id"),
+            snapshot_id=mutation.get("snapshot_id"),
+            verification_ok=(mutation.get("verification") or {}).get("ok"),
+            backend=mutation.get("backend") or "file",
+            refresh=True,
+        )
+        return {"ok": mutation.get("ok", False), "mutation": mutation, "narration": narration}
+
+    if cmd == "refresh":
+        target = args[0] if args else (state.get("board") or state.get("project"))
+        return refresh_kicad_view(target)
+
+    if cmd == "layout":
+        return arrange_side_by_side()
 
     if cmd == "drc":
         board = state.get("board") or _require_board(state)

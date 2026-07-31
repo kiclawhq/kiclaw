@@ -6,6 +6,9 @@ All notable KiClaw changes are recorded here. The project follows semantic versi
 
 ### Added
 
+- **Hybrid live product direction** (`docs/PRODUCT.md`): file-first safety + best-effort visual update; no fake full GUI control.
+- **Post-edit visual update**: `refresh_kicad_view`, `narrate_mutation`, `arrange_side_by_side` (macOS layout + IPC refresh attempt + reload guidance).
+- **Workbench defaults**: `kiclaw workbench` opens chat by default and attempts side-by-side terminal/KiCad layout.
 - **Split-screen product workbench**: `kiclaw start` / `kiclaw workbench` launches KiCad, sets session mode, and prints the terminal-left / KiCad-right guide; MCP tool `start_engineering_session`.
 - **Interactive left-terminal REPL**: `kiclaw chat` for doctor/open/analyze/move/review without a cloud model; `start --then chat|serve` handoff.
 - **Project session lifecycle**: `create_new_project`, `open_project_session`, `save_project`, `close_project`, `get_active_project`.

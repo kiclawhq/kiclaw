@@ -94,6 +94,7 @@ from .project_session import (
     open_project_session,
     save_project,
 )
+from .visual_update import arrange_side_by_side, narrate_mutation, refresh_kicad_view
 from .workbench import start_engineering_session
 
 logger = logging.getLogger("kiclaw")
@@ -635,15 +636,60 @@ def start_engineering_session_tool(
     create_directory: str | None = None,
     launch: bool = True,
     mode: str = "live",
+    arrange_windows: bool = True,
 ) -> dict[str, Any]:
-    """Product entry: set project, launch KiCad, return split-screen workbench guide (terminal + live canvas)."""
+    """Product entry: hybrid live workbench — launch KiCad, layout windows, report readiness (not full GUI puppet)."""
     return start_engineering_session(
         project,
         create_name=create_name,
         create_directory=create_directory,
         launch=launch,
         mode=mode,
+        arrange_windows=arrange_windows,
     )
+
+
+@mcp.tool(name="refresh_kicad_view")
+def refresh_kicad_view_tool(
+    path: str | None = None,
+    kind: str = "auto",
+    take_screenshot: bool = False,
+    screenshot_path: str | None = None,
+) -> dict[str, Any]:
+    """Post-edit visual update: best-effort IPC refresh + reload guidance + optional screenshot."""
+    return refresh_kicad_view(path, kind=kind, take_screenshot=take_screenshot, screenshot_path=screenshot_path)
+
+
+@mcp.tool(name="narrate_mutation")
+def narrate_mutation_tool(
+    action: str,
+    summary: str,
+    path: str | None = None,
+    look_at: str | None = None,
+    transaction_id: str | None = None,
+    snapshot_id: str | None = None,
+    verification_ok: bool | None = None,
+    backend: str = "file",
+    refresh: bool = True,
+) -> dict[str, Any]:
+    """Standard post-edit agent narration: what changed, where to look, snapshot, visual update path."""
+    return narrate_mutation(
+        action=action,
+        path=path,
+        summary=summary,
+        look_at=look_at,
+        transaction_id=transaction_id,
+        snapshot_id=snapshot_id,
+        verification_ok=verification_ok,
+        backend=backend,
+        refresh=refresh,
+    )
+
+
+@mcp.tool(name="arrange_side_by_side")
+def arrange_side_by_side_tool() -> dict[str, Any]:
+    """Best-effort: put agent terminal on the left and KiCad on the right (macOS)."""
+    return arrange_side_by_side()
 
 
 # --- Full-surface expansion: project, library, remaining edits, live extras ---
@@ -835,12 +881,13 @@ _TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     ),
     "ipc": (
         "ipc_session_info", "ipc_board_status", "ipc_move_footprint", "ipc_place_footprint", "ipc_add_track",
-        "ipc_save_board", "pcb_backend_policy", "launch_kicad", "live_status", "get_selection", "get_view_state",
-        "get_canvas_state", "switch_editor", "select_object", "highlight_net", "highlight_component", "zoom_to_object",
+        "ipc_save_board", "pcb_backend_policy", "launch_kicad", "live_status", "refresh_kicad_view",
+        "arrange_side_by_side", "get_selection", "get_view_state", "get_canvas_state", "switch_editor",
+        "select_object", "highlight_net", "highlight_component", "zoom_to_object",
     ),
     "meta": (
         "get_agent_mode", "set_agent_mode", "require_approval", "get_tool_help", "suggest_next_actions",
-        "start_engineering_session",
+        "start_engineering_session", "narrate_mutation",
     ),
 }
 
