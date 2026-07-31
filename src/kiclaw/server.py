@@ -81,6 +81,7 @@ from .live import (
     ipc_save_board,
     launch_kicad,
     live_status,
+    open_in_kicad,
     render_board,
     select_object,
     switch_editor,
@@ -94,6 +95,7 @@ from .project_session import (
     open_project_session,
     save_project,
 )
+from .hybrid import MUTATION_TOOLS, attach_hybrid_live
 from .visual_update import arrange_side_by_side, narrate_mutation, refresh_kicad_view
 from .workbench import start_engineering_session
 
@@ -101,13 +103,28 @@ logger = logging.getLogger("kiclaw")
 
 
 class KiClawMCP(FastMCP):
-    """FastMCP with human-readable stderr progress logs for operators."""
+    """FastMCP with progress logs and automatic hybrid-live narration on mutations."""
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         started = time.perf_counter()
         logger.info("→ %s", name)
         try:
-            result = await super().call_tool(name, arguments)
+            # Run tool without FastMCP convert so we can attach hybrid_live to the
+            # structured dict before it becomes TextContent / structured Content.
+            context = self.get_context()
+            raw = await self._tool_manager.call_tool(
+                name, arguments or {}, context=context, convert_result=False
+            )
+            if name in MUTATION_TOOLS:
+                try:
+                    raw = attach_hybrid_live(name, arguments or {}, raw)
+                except Exception:
+                    logger.exception("hybrid_live attach failed for %s", name)
+            tool = self._tool_manager.get_tool(name)
+            if tool is not None:
+                result = tool.fn_metadata.convert_result(raw)
+            else:
+                result = raw
         except Exception:
             logger.exception("✗ %s failed", name)
             raise
@@ -550,8 +567,13 @@ def place_power_symbol_tool(schematic: str, power_name: str, x: float, y: float,
 
 
 @mcp.tool(name="launch_kicad")
-def launch_kicad_tool(project: str | None = None) -> dict[str, Any]:
-    return launch_kicad(project)
+def launch_kicad_tool(
+    project: str | None = None,
+    open_board: bool = True,
+    board: str | None = None,
+) -> dict[str, Any]:
+    """Launch KiCad GUI; by default also opens the project board in PCB Editor when found."""
+    return launch_kicad(project, open_board=open_board, board=board)
 
 
 @mcp.tool(name="live_status")
@@ -637,8 +659,9 @@ def start_engineering_session_tool(
     launch: bool = True,
     mode: str = "live",
     arrange_windows: bool = True,
+    open_board: bool = True,
 ) -> dict[str, Any]:
-    """Product entry: hybrid live workbench — launch KiCad, layout windows, report readiness (not full GUI puppet)."""
+    """Product entry: hybrid live workbench — launch KiCad, open board, layout windows, report readiness (not full GUI puppet)."""
     return start_engineering_session(
         project,
         create_name=create_name,
@@ -646,6 +669,7 @@ def start_engineering_session_tool(
         launch=launch,
         mode=mode,
         arrange_windows=arrange_windows,
+        open_board=open_board,
     )
 
 
@@ -690,6 +714,12 @@ def narrate_mutation_tool(
 def arrange_side_by_side_tool() -> dict[str, Any]:
     """Best-effort: put agent terminal on the left and KiCad on the right (macOS)."""
     return arrange_side_by_side()
+
+
+@mcp.tool(name="open_in_kicad")
+def open_in_kicad_tool(path: str) -> dict[str, Any]:
+    """Open a .kicad_pro / .kicad_pcb / .kicad_sch (or path) in the KiCad GUI."""
+    return open_in_kicad(path)
 
 
 # --- Full-surface expansion: project, library, remaining edits, live extras ---
@@ -881,9 +911,10 @@ _TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     ),
     "ipc": (
         "ipc_session_info", "ipc_board_status", "ipc_move_footprint", "ipc_place_footprint", "ipc_add_track",
-        "ipc_save_board", "pcb_backend_policy", "launch_kicad", "live_status", "refresh_kicad_view",
-        "arrange_side_by_side", "get_selection", "get_view_state", "get_canvas_state", "switch_editor",
-        "select_object", "highlight_net", "highlight_component", "zoom_to_object",
+        "ipc_save_board", "pcb_backend_policy", "launch_kicad", "open_in_kicad", "live_status",
+        "refresh_kicad_view", "arrange_side_by_side", "get_selection", "get_view_state",
+        "get_canvas_state", "switch_editor", "select_object", "highlight_net", "highlight_component",
+        "zoom_to_object",
     ),
     "meta": (
         "get_agent_mode", "set_agent_mode", "require_approval", "get_tool_help", "suggest_next_actions",

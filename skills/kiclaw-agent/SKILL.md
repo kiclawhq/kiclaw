@@ -85,11 +85,14 @@ Or from MCP: call `start_engineering_session` first, then execute the user's PCB
 We **do not** depend on deep unofficial GUI automation. We deliver a **live feeling** with:
 
 1. **Primary:** safe file-backed edits (snapshot → atomic → verify).
-2. **Visual update:** after each mutation call `refresh_kicad_view` and/or `narrate_mutation` so the user knows what to look at (IPC refresh if possible, else reload guidance).
-3. **Best-effort IPC:** use `ipc_move_footprint` only when `live_status` is ready; fall back to file immediately on failure.
-4. **Session:** `start_engineering_session` / `kiclaw workbench` launches KiCad, tries side-by-side layout, reports readiness.
+2. **Auto visual update:** mutation tools (`move_footprint`, `add_track`, schematic edits, etc.) **automatically** attach `hybrid_live` + `user_message` via the MCP server (narration + best-effort `refresh_kicad_view`). Prefer that over a separate call when present.
+3. **Optional explicit tools:** call `refresh_kicad_view` / `narrate_mutation` / `open_in_kicad` when you need a reload pass without a mutation.
+4. **Best-effort IPC:** use `ipc_move_footprint` only when `live_status` is ready; fall back to file immediately on failure.
+5. **Session:** `start_engineering_session` / `kiclaw workbench` launches KiCad, opens the board when found, tries side-by-side layout, reports readiness.
 
 #### After every mutation, respond like this
+
+Prefer the tool result's `user_message` / `hybrid_live.message` when present. Shape:
 
 > I have [done X]. Snapshot created. Verification [passed/failed].  
 > Please look at [area / component]. Visual path: [ipc_refresh | file_reload_guidance].  

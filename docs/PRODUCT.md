@@ -57,3 +57,15 @@ Success sounds like:
 4. Agent narration quality
 5. Deeper analysis + safe edits
 6. Heavier GUI automation only if official IPC improves
+
+## Implementation status (productized)
+
+| Piece | Status |
+|-------|--------|
+| File-first mutators + snapshots | Shipped |
+| `refresh_kicad_view` / `narrate_mutation` MCP tools | Shipped |
+| **Auto `hybrid_live` on mutation tools** (server `call_tool` wrapper) | Shipped |
+| `kiclaw workbench` / `start` — launch KiCad, open board, side-by-side | Shipped (OS-dependent layout) |
+| `open_in_kicad` / chat `open-board` / `reload` | Shipped |
+| Deep official IPC reload of open documents | Best-effort only (kipy/KiCad version dependent) |
+| Full GUI mouse/toolbar automation | **Out of scope** |

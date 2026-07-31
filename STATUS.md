@@ -1,8 +1,8 @@
 # KiClaw project status
 
-**Snapshot date:** 2026-07-18  
+**Snapshot date:** 2026-07-31  
 **Release line:** 0.1.0  
-**Scope:** local KiCad MCP server and guarded engineering workflow
+**Scope:** local KiCad MCP server and guarded hybrid-live engineering workflow
 
 ## Verified complete
 
@@ -14,7 +14,10 @@
 - Optional IPC support reports unavailable states honestly and supports one native undoable footprint move when KiCad's API Server is reachable.
 - Native KiCad DRC/ERC and fabrication exports are used wherever the CLI is the source of truth.
 - CI emits a JSON project-review artifact.
-- Automated verification currently passes **27/27 tests**, including native KiCad fixtures when installed.
+- **Hybrid live product model** (`docs/PRODUCT.md`): file-first safety + best-effort visual update; no fake full GUI control.
+- **Auto `hybrid_live` / `user_message`** attached on mutation tools via MCP `call_tool` wrapper (`hybrid.py` + `visual_update.py`).
+- Workbench: `kiclaw start` / `workbench` launch KiCad, open board when found, side-by-side layout (macOS), chat/serve handoff; chat has `open-board` / `reload`.
+- Automated verification currently passes **44 tests** (+2 skipped), including hybrid unit tests.
 
 ## Evidence from this workspace
 

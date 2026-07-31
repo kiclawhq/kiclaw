@@ -13,11 +13,7 @@ from .core import KiClawError, capability_report, ipc_capability, resolve_path
 MACOS_KICAD = Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad")
 
 
-def launch_kicad(project: str | Path | None = None) -> dict[str, Any]:
-    """Launch the KiCad GUI, optionally opening a project file.
-
-    Live tools still require Preferences → Plugins → API Server enabled after launch.
-    """
+def _kicad_gui_exe() -> Path | None:
     candidates = []
     configured = os.environ.get("KICLAW_KICAD_GUI")
     if configured:
@@ -26,25 +22,134 @@ def launch_kicad(project: str | Path | None = None) -> dict[str, Any]:
     if which:
         candidates.append(Path(which))
     candidates.append(MACOS_KICAD)
-    exe = next((c for c in candidates if c.is_file() and os.access(c, os.X_OK)), None)
+    return next((c for c in candidates if c.is_file() and os.access(c, os.X_OK)), None)
+
+
+def launch_kicad(
+    project: str | Path | None = None,
+    *,
+    open_board: bool = True,
+    board: str | Path | None = None,
+) -> dict[str, Any]:
+    """Launch the KiCad GUI, optionally opening a project and/or PCB file.
+
+    Live tools still require Preferences → Plugins → API Server enabled after launch.
+    When ``open_board`` is true (default), also opens the first ``.kicad_pcb`` so the
+    PCB Editor is more likely ready for hybrid visual feedback.
+    """
+    exe = _kicad_gui_exe()
     if not exe:
         return {
             "ok": False,
             "available": False,
             "reason": "KiCad GUI executable not found. Set KICLAW_KICAD_GUI or install KiCad.",
         }
-    cmd = [str(exe)]
-    opened = None
+
+    project_file: Path | None = None
+    board_file: Path | None = None
+    root: Path | None = None
+
+    if board is not None:
+        board_file = resolve_path(board)
+        if board_file.is_file() and board_file.suffix == ".kicad_pcb":
+            root = board_file.parent
+        else:
+            board_file = None
+
     if project is not None:
         path = resolve_path(project)
         if path.is_dir():
+            root = path
             pros = sorted(path.glob("*.kicad_pro"))
-            path = pros[0] if pros else path
-        if path.is_file():
-            cmd.append(str(path))
-            opened = str(path)
+            project_file = pros[0] if pros else None
+            if board_file is None and open_board:
+                pcbs = sorted(path.glob("*.kicad_pcb"))
+                board_file = pcbs[0] if pcbs else None
+        elif path.is_file():
+            if path.suffix == ".kicad_pcb":
+                board_file = path
+                root = path.parent
+                pros = sorted(root.glob("*.kicad_pro"))
+                project_file = pros[0] if pros else None
+            elif path.suffix == ".kicad_pro":
+                project_file = path
+                root = path.parent
+                if board_file is None and open_board:
+                    pcbs = sorted(root.glob("*.kicad_pcb"))
+                    board_file = pcbs[0] if pcbs else None
+            else:
+                project_file = path
+                root = path.parent
+
+    # Prefer opening the board document so PCB Editor gets a document (better hybrid UX).
+    # Fall back to project file, then bare launch.
+    primary = board_file if (open_board and board_file and board_file.is_file()) else project_file
+    cmd = [str(exe)]
+    opened = None
+    if primary is not None and primary.is_file():
+        cmd.append(str(primary))
+        opened = str(primary)
+
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError as exc:
+        return {"ok": False, "available": True, "path": str(exe), "reason": str(exc)}
+
+    # If we opened the project manager only, best-effort open board in a second launch.
+    secondary_opened = None
+    if (
+        open_board
+        and board_file is not None
+        and board_file.is_file()
+        and opened
+        and Path(opened).suffix == ".kicad_pro"
+    ):
+        try:
+            sec = subprocess.Popen(
+                [str(exe), str(board_file)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            secondary_opened = str(board_file)
+            _ = sec.pid
+        except OSError:
+            secondary_opened = None
+
+    return {
+        "ok": True,
+        "available": True,
+        "path": str(exe),
+        "pid": proc.pid,
+        "opened": opened,
+        "opened_board": secondary_opened or (str(board_file) if board_file and opened and Path(opened).suffix == ".kicad_pcb" else None),
+        "project_file": str(project_file) if project_file else None,
+        "board_file": str(board_file) if board_file else None,
+        "project_root": str(root) if root else None,
+        "note": "Enable KiCad API Server (Preferences → Plugins → API Server) for live IPC tools. Install kiclaw[ipc] for kipy bindings.",
+        "next": ["ipc_session_info", "capability_report", "refresh_kicad_view", "set_agent_mode"],
+    }
+
+
+def open_in_kicad(path: str | Path) -> dict[str, Any]:
+    """Open a specific project/board/schematic file in the KiCad GUI (best-effort)."""
+    exe = _kicad_gui_exe()
+    if not exe:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "KiCad GUI executable not found. Set KICLAW_KICAD_GUI or install KiCad.",
+        }
+    target = resolve_path(path)
+    if not target.exists():
+        return {"ok": False, "reason": f"Path does not exist: {target}"}
+    try:
+        proc = subprocess.Popen(
+            [str(exe), str(target)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
     except OSError as exc:
         return {"ok": False, "available": True, "path": str(exe), "reason": str(exc)}
     return {
@@ -52,9 +157,8 @@ def launch_kicad(project: str | Path | None = None) -> dict[str, Any]:
         "available": True,
         "path": str(exe),
         "pid": proc.pid,
-        "opened": opened,
-        "note": "Enable KiCad API Server (Preferences → Plugins → API Server) for live IPC tools. Install kiclaw[ipc] for kipy bindings.",
-        "next": ["ipc_session_info", "capability_report", "set_agent_mode"],
+        "opened": str(target),
+        "note": "If the file was already open, focus the editor and use File → Revert after disk edits.",
     }
 
 

@@ -36,8 +36,9 @@ RIGHT: KiCad     —  PCB / schematic canvas
 ```
 
 ```bash
-# Open the workbench (launches KiCad + prints the split-screen guide)
+# Open the hybrid workbench (launch KiCad, open board, layout, then chat)
 kiclaw start /path/to/project
+# or: kiclaw workbench /path/to/project
 
 # Create a new board project and open the workbench
 kiclaw start --new MyCustomPCB --dir ~/Documents
@@ -47,9 +48,10 @@ kiclaw chat
 
 # Left side: full AI tools (connect Claude / Codex / Cursor MCP here)
 kiclaw serve
+# after workbench: kiclaw workbench --then serve
 ```
 
-Then say things like *“make me a custom PCB…”* in the AI client. The agent calls MCP tools; KiCad on the right shows the design (live via IPC when the API Server is enabled, otherwise after file reload).
+Then say things like *“make me a custom PCB…”* in the AI client. The agent calls MCP tools; **mutation results include `hybrid_live` / `user_message`** (what changed + where to look + reload path). KiCad on the right updates via best-effort IPC when the API Server is enabled, otherwise after file reload — we never claim full GUI puppetry.
 
 ## Installation
 

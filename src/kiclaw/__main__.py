@@ -89,13 +89,14 @@ def main() -> None:
     start.add_argument("--dir", dest="new_dir", help="parent directory for --new (default: cwd)")
     start.add_argument("--no-launch", action="store_true", help="do not launch KiCad GUI")
     start.add_argument("--no-layout", action="store_true", help="do not attempt side-by-side window layout")
+    start.add_argument("--no-open-board", action="store_true", help="launch project only; do not open .kicad_pcb")
     start.add_argument("--mode", default="live", choices=["live", "edit", "inspect", "fab", "review"])
     start.add_argument("--json", action="store_true", help="print full JSON instead of human guide")
     start.add_argument(
         "--then",
         choices=["none", "chat", "serve"],
-        default="none",
-        help="after session start: open local chat REPL or MCP serve",
+        default="chat",
+        help="after session start: open local chat REPL or MCP serve (default: chat)",
     )
     chat = commands.add_parser("chat", help="interactive left-terminal REPL (commands next to live KiCad)")
     chat.add_argument("project", nargs="?", help="optional project to activate")
@@ -108,6 +109,7 @@ def main() -> None:
     workbench.add_argument("--dir", dest="new_dir", help="parent directory for --new")
     workbench.add_argument("--no-launch", action="store_true")
     workbench.add_argument("--no-layout", action="store_true", help="do not attempt side-by-side window layout")
+    workbench.add_argument("--no-open-board", action="store_true", help="launch project only; do not open .kicad_pcb")
     workbench.add_argument("--mode", default="live", choices=["live", "edit", "inspect", "fab", "review"])
     workbench.add_argument("--json", action="store_true")
     workbench.add_argument(
@@ -131,6 +133,7 @@ def main() -> None:
             launch=not args.no_launch,
             mode=args.mode,
             arrange_windows=not getattr(args, "no_layout", False),
+            open_board=not getattr(args, "no_open_board", False),
         )
         if args.json:
             print(json.dumps(result, indent=2, default=str))
